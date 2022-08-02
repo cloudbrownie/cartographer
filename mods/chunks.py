@@ -49,7 +49,7 @@ class Chunks:
     return self.sheet_id
 
   # converts glob pos to chunk coord
-  def get_chunk_coords(self, x : float, y : float) -> tuple:
+  def get_chunk_coords(self, x : float, y : float) -> tuple[int, int]:
     return x // self.chunk_px, y // self.chunk_px
 
   # converts glob pos to tile coord 
@@ -271,22 +271,3 @@ class Chunks:
 
   def auto_tile(self, tiles : list, sheet_config : dict) -> None:
     return
-
-if __name__ == '__main__':
-  a = [1, 2, 3, 4, 5]
-  b = [1, 2]
-
-  print(a[0:2] == b)
-
-  t = Chunks()
-
-  print(t.chunk_px)
-  vis_chunks = t.get_chunks((0, 0, 256, 256))
-
-  for cx, cy in vis_chunks:
-    print(cx * t.chunk_px, cy * t.chunk_px)
-
-  print(t.get_tile_coords(256, 256))
-
-  x = y = float('inf')
-  print(x == y, x is y)

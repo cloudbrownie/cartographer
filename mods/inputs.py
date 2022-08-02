@@ -19,7 +19,11 @@ class Inputs:
       pygame.K_LCTRL:False,
     }
 
+    self.mouse_pos = 0, 0
+
   def handle(self):
+
+    self.mouse_pos = pygame.mouse.get_pos()
 
     for event in pygame.event.get():
       if event.type == pygame.QUIT:

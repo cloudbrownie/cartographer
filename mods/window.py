@@ -1,5 +1,6 @@
 import pygame
 
+
 class Window:
   def __init__(self, glob, width, height):
     self.glob = glob
@@ -15,5 +16,6 @@ class Window:
     self.window.fill(self.glob.COLORS['main'])
     self.window.fill(self.glob.COLORS['accent'], [0, 0, self.width * 0.2, self.height])
 
+    self.glob.font.render_txt('font rendering', self.window, (10, 10))
 
     pygame.display.update()
