@@ -5,6 +5,9 @@ from pygame.locals import *
 class Inputs:
   def __init__(self, glob):
 
+    pygame.event.set_blocked(None)
+    pygame.event.set_allowed([QUIT, KEYDOWN])
+
     self.glob = glob
 
     self.sel_rect = {

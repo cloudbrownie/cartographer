@@ -1,7 +1,4 @@
 
-from tkinter import N
-
-
 class Chunks:
   # init everything
   def __init__(self):
