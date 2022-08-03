@@ -49,15 +49,15 @@ class Chunks:
     return self.sheet_id
 
   # converts glob pos to chunk coord
-  def get_chunk_coords(self, x : float, y : float) -> tuple[int, int]:
+  def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
     return x // self.chunk_px, y // self.chunk_px
 
   # converts glob pos to tile coord 
-  def get_tile_coords(self, x : float, y : float) -> tuple:
+  def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
     return x // self.tile_size, y // self.tile_size
 
   # converts tile coord to chunk rel tile coords
-  def get_rel_tile_coords(self, x : float, y : float) -> tuple:
+  def get_rel_tile_coords(self, x : float, y : float) -> tuple[float, float]:
     x %= self.chunk_size
     y %= self.chunk_size
 
@@ -68,7 +68,7 @@ class Chunks:
     return f'{int(x)},{int(y)}'
 
   # returns x and y coords from formatted chunk tag
-  def deformat_chunk_tag(self, tag : str) -> tuple:
+  def deformat_chunk_tag(self, tag : str) -> tuple[int, int]:
     x, y = tag.split(',')
     return int(x), int(y)
 
