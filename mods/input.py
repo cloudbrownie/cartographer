@@ -2,7 +2,7 @@ import pygame, sys
 
 from pygame.locals import *
 
-class Inputs:
+class Input:
   # init
   def __init__(self, glob):
 
@@ -48,18 +48,22 @@ class Inputs:
   # returns the pen position relative to camera
   @property
   def pen_pos(self) -> tuple[float, float]:
-    mx = (self.mouse_pos[0] - self.glob.toolbar_width) * self.glob.cam_zoom + self.glob.scroll[0]
-    my = self.mouse_pos[1] * self.glob.cam_zoom + self.glob.scroll[1]
+    scroll = self.glob.scroll
+    zoom = self.glob.cam_zoom
+    mx = (self.mouse_pos[0] - self.glob.tbar_width) * zoom + scroll[0]
+    my = self.mouse_pos[1] * zoom + scroll[1]
 
     if self.e_types[self.e_i] != 'tiles' or self.tools[self.tool_i] != 'draw':
       return mx, my
 
     return mx // self.glob.chunks.tile_size, my // self.glob.chunks.tile_size
 
+  # called each frame to handle all events and inputs
   def handle(self) -> None:
 
     self.mouse_pos = pygame.mouse.get_pos()
 
+    # handle each event
     for event in pygame.event.get():
       if event.type == pygame.QUIT:
         pygame.quit()
@@ -78,8 +82,10 @@ class Inputs:
         if event.key in self.arrow_bools.keys():
           self.arrow_bools[event.key] = False
 
-
+    # move the scroll target with the arrows
     for key in self.arrow_bools:
       if self.arrow_bools[key]:
-        self.glob.scroll_target[0] += self.arrow_vals[key][0] * self.glob.cam_scroll_speed * self.glob.clock.dt
-        self.glob.scroll_target[1] += self.arrow_vals[key][1] * self.glob.cam_scroll_speed * self.glob.clock.dt
+        dt = self.glob.clock.dt
+        cam_speed = self.glob.cam_speed
+        self.glob.scroll_t[0] += self.arrow_vals[key][0] * cam_speed * dt
+        self.glob.scroll_t[1] += self.arrow_vals[key][1] * cam_speed * dt
