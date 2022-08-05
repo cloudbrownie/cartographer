@@ -1,4 +1,8 @@
 
+# returns if a value is in bounds
+def is_inbounds(p : tuple, l : float, r : float, t : float, b : float) -> bool:
+  return l <= p[0] <= r and t <= p[1] <= b
+
 class Chunks:
   # init everything
   def __init__(self):
@@ -73,17 +77,20 @@ class Chunks:
     return int(x), int(y)
 
   # get a tile in a layer in a chunk using rel tile coords
-  def get_tile_in_chunk(self, x : float, y : float, layer : str, tag : str) -> tuple:
+  def get_tile_in_chunk(self, x : float, y : float, layer : str,
+                                                      tag : str) -> tuple:
     for tile in self.chunks[tag]['tiles'][layer]:
       if tile[0:2] == [x, y]:
         return tile
 
   # check if current tile data exists already
-  def check_duplicate_tile(self, tag : str, layer : str, tile_data : tuple) -> bool:
+  def check_duplicate_tile(self, tag : str, layer : str, 
+                                        tile_data : tuple) -> bool:
     return tile_data in self.chunks[tag]['tiles'][layer]
 
   # adds a tile to a layer in a chunk
-  def add_tile(self, x : float, y : float, layer : str, sheetname : str, sheet_coords : tuple) -> tuple:
+  def add_tile(self, x : float, y : float, layer : str, 
+                        sheetname : str, sheet_coords : tuple) -> tuple:
     tile_coords = self.get_tile_coords(x, y)
 
     rel_coords = self.get_rel_tile_coords(*tile_coords)
@@ -138,10 +145,10 @@ class Chunks:
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list:
     chunks = []
 
-    left, right, top, bottom = self.get_bounds(rect)
+    left, right, top, bot = self.get_bounds(rect)
     
     for i in range(left, right):
-      for j in range(top, bottom):
+      for j in range(top, bot):
 
         tag = self.get_chunk_tag(i, j)
 
@@ -155,11 +162,12 @@ class Chunks:
   # return a bounding rect list
   def get_bounds(self, rect : list) -> list:
     left, top = self.get_tile_coords(rect[0], rect[1])
-    right, bottom = self.get_tile_coords(rect[0] + rect[2], rect[1] + rect[3])
-    return left, right, top, bottom
+    right, bot = self.get_tile_coords(rect[0] + rect[2], rect[1] + rect[3])
+    return left, right, top, bot
 
   # flood files an area with tiles
-  def flood(self, pos : tuple, layer : str, sheet_data : tuple, rect : list) -> list:
+  def flood(self, pos : tuple, layer : str, sheet_data : tuple, 
+                                                  rect : list) -> list:
     tile_x, tile_y = self.get_tile_coords(*pos)
     chunk_x, chunk_y = self.get_chunk_coords(tile_x, tile_y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
@@ -171,9 +179,9 @@ class Chunks:
         if tile_data[0:2] == list(rel_coords):
           return [], []
 
-    left, right, top, bottom = self.get_bounds(rect)
+    left, right, top, bot = self.get_bounds(rect)
 
-    if not (left <= tile_x <= right) or not (top <= tile_y <= bottom):
+    if not (left <= tile_x <= right) or not (top <= tile_y <= bot):
       return
 
     open_l = [(tile_x, tile_y)]
@@ -191,7 +199,8 @@ class Chunks:
         chunk_x, chunk_y = self.deformat_chunk_tag(tag)
         rel_tile_x, rel_tile_y = rel_tile_data[0:2]
 
-        closed_l.append((rel_tile_x + chunk_x * self.chunk_size, rel_tile_y + chunk_y * self.chunk_size))
+        closed_l.append((rel_tile_x + chunk_x * self.chunk_size, 
+                          rel_tile_y + chunk_y * self.chunk_size))
 
 
     if (tile_x, tile_y) not in closed_l:
@@ -203,7 +212,7 @@ class Chunks:
       for nx, ny in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
         n_pos = curr_x + nx, curr_y + ny
         
-        if n_pos in closed_l or not (left <= n_pos[0] <= right) or not (top <= n_pos[1] <= bottom):
+        if n_pos in closed_l or not is_inbounds(n_pos, left, right, top, bot):
           continue
 
         if n_pos not in open_l:
@@ -225,7 +234,7 @@ class Chunks:
 
       cull_tiles = []
       
-      left, right, top, bottom = self.get_bounds(rect)
+      left, right, top, bot = self.get_bounds(rect)
       for tag in bound_chunks:
         if layer not in self.chunks[tag]['tiles']:
           continue
@@ -237,7 +246,7 @@ class Chunks:
           glob_x = rel_x + cx * self.chunk_size
           glob_y = rel_y + cy * self.chunk_size
 
-          if left <= glob_x <= right and top <= glob_y <= bottom:
+          if left <= glob_x <= right and top <= glob_y <= bot:
             cull_tiles.append((glob_x, glob_y))
 
   # returns a list of connected tiles on point
@@ -248,10 +257,10 @@ class Chunks:
     closed_l = []
 
     if not rect:
-      left = bottom = float('-inf')
+      left = bot = float('-inf')
       right = top = float('inf')
     else:
-      left, right, top, bottom = self.get_bounds(rect)
+      left, right, top, bot = self.get_bounds(rect)
 
     while len(open_l) > 0:
       curr_x, curr_y = open_l.pop(0)
@@ -259,7 +268,7 @@ class Chunks:
       for nx, ny in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
         n_pos = curr_x + nx, curr_y + ny
 
-        if n_pos in closed_l or not (left <= n_pos[0] <= right) or not (top <= n_pos[1] <= bottom):
+        if n_pos in closed_l or not is_inbounds(n_pos, left, right, top, bot):
           continue
 
         if n_pos not in open_l:
