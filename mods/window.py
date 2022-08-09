@@ -1,8 +1,7 @@
 import pygame
 
 from pygame.draw import *
-
-from math import floor
+from pygame.transform import scale
 
 class Window:
   # init
