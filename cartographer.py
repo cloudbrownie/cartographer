@@ -6,7 +6,6 @@ glob = Glob(1000, 700)
 # window loop
 while 1:
 
-  glob.input.handle()
   glob.window.render()
+  glob.input.handle()
   glob.clock.tick()
-  glob.update()

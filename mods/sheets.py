@@ -9,6 +9,10 @@ class Sheets:
 
     }
 
+    self.sheet_coords = {
+
+    }
+
     # grab all .png files in the input dir
     files = [f for f in os.listdir('input/') if f.endswith('.png')]
 
@@ -16,6 +20,8 @@ class Sheets:
     for f in files:
       sheet_surf = pygame.image.load(f'input/{f}')
       sheet_surf.set_colorkey((0, 0, 0))
+
+      self.sheets[f] = sheet_surf
 
       assets = []
 
@@ -39,5 +45,14 @@ class Sheets:
 
               row.append((j + 1, i + 1, w, h))
           assets.append(row)
-
+        
+        self.sheet_coords[f] = assets
       
+  def scaled_surf(self, sheet : pygame.Surface, coords : tuple, 
+                                              scale : float) -> pygame.Surface:
+    sub_surf = sheet.subsurface(coords)
+    surf = pygame.Surface((coords[2] * scale, coords[3] * scale))
+    surf.set_colorkey((0, 0, 0))
+
+    surf.blit(pygame.transform.scale(sub_surf, surf.get_size()), (0, 0))
+    return surf

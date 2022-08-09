@@ -7,15 +7,15 @@ class Input:
   def __init__(self, glob):
 
     pygame.event.set_blocked(None)
-    pygame.event.set_allowed([QUIT, KEYDOWN, KEYUP])
+    pygame.event.set_allowed([QUIT, KEYDOWN, KEYUP, MOUSEBUTTONDOWN, MOUSEBUTTONUP])
 
     self.glob = glob
 
     self.sel_box = [None, None]
 
     self.mods = {
-      pygame.K_LSHIFT : False,
-      pygame.K_LCTRL : False,
+      K_LSHIFT : False,
+      K_LCTRL : False,
     }
 
     self.mouse_pos = 0, 0
@@ -32,17 +32,17 @@ class Input:
     self.holding = False
 
     self.arrow_bools = {
-      pygame.K_UP : False,
-      pygame.K_DOWN : False,
-      pygame.K_LEFT : False,
-      pygame.K_RIGHT : False
+      K_UP : False,
+      K_DOWN : False,
+      K_LEFT : False,
+      K_RIGHT : False
     }
 
     self.arrow_vals = {
-      pygame.K_UP : (0, -1),
-      pygame.K_DOWN : (0, 1),
-      pygame.K_LEFT : (-1, 0),
-      pygame.K_RIGHT : (1, 0)
+      K_UP : (0, -1),
+      K_DOWN : (0, 1),
+      K_LEFT : (-1, 0),
+      K_RIGHT : (1, 0)
     }
 
   # returns the pen position relative to camera
@@ -61,26 +61,34 @@ class Input:
   # called each frame to handle all events and inputs
   def handle(self) -> None:
 
-    self.mouse_pos = pygame.mouse.get_pos()
+    mx, my = pygame.mouse.get_pos()
+    self.mouse_pos = mx, my
 
     # handle each event
     for event in pygame.event.get():
-      if event.type == pygame.QUIT:
+      if event.type == QUIT:
         pygame.quit()
         sys.exit()
 
-      elif event.type == pygame.KEYDOWN:
-        if event.key == pygame.K_ESCAPE:
+      elif event.type == KEYDOWN:
+        if event.key == K_ESCAPE:
           pygame.quit()
           sys.exit()
 
         elif event.key in self.arrow_bools.keys():
           self.arrow_bools[event.key] = True
 
-      elif event.type == pygame.KEYUP:
+      elif event.type == KEYUP:
 
         if event.key in self.arrow_bools.keys():
           self.arrow_bools[event.key] = False
+
+      elif event.type == MOUSEBUTTONDOWN:
+
+        if event.button == 1:
+
+          if mx <= self.glob.tbar_width and self.glob.window.hov_sheet:
+            self.glob.window.sel_sheet = self.glob.window.hov_sheet
 
     # move the scroll target with the arrows
     for key in self.arrow_bools:
