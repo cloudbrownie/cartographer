@@ -9,3 +9,4 @@ while 1:
   glob.window.render()
   glob.input.handle()
   glob.clock.tick()
+  glob.update()

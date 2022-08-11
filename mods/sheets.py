@@ -1,5 +1,9 @@
 import pygame, os
 
+from pygame import Surface
+
+TRANSPARENT_COLOR = 0, 0, 0
+
 class Sheets:
   # init
   def __init__(self):
@@ -13,17 +17,23 @@ class Sheets:
 
     }
 
+    self.sheet_configs = {
+      
+    }
+
     # grab all .png files in the input dir
     files = [f for f in os.listdir('input/') if f.endswith('.png')]
 
-    # grab each asset from each sheet and store the coords in a dict
+    # grab each texture from each sheet and store the coords in a dict
     for f in files:
       sheet_surf = pygame.image.load(f'input/{f}')
-      sheet_surf.set_colorkey((0, 0, 0))
+      sheet_surf.set_colorkey(TRANSPARENT_COLOR)
 
-      self.sheets[f] = sheet_surf
+      self.sheets[f] = {
+        '1' : sheet_surf
+      }
 
-      assets = []
+      textures = []
 
       # find each asset
       for i in range(sheet_surf.get_height()):
@@ -44,15 +54,42 @@ class Sheets:
                   break
 
               row.append((j + 1, i + 1, w, h))
-          assets.append(row)
+          textures.append(row)
         
-        self.sheet_coords[f] = assets
-      
-  def scaled_surf(self, sheet : pygame.Surface, coords : tuple, 
-                                              scale : float) -> pygame.Surface:
-    sub_surf = sheet.subsurface(coords)
-    surf = pygame.Surface((coords[2] * scale, coords[3] * scale))
-    surf.set_colorkey((0, 0, 0))
+        self.sheet_coords[f] = textures
 
-    surf.blit(pygame.transform.scale(sub_surf, surf.get_size()), (0, 0))
-    return surf
+  # returns a lsit of all stored sheets
+  @property
+  def sheet_names(self) -> list[str]:
+    return [sheet for sheet in self.sheets]
+
+  # generates a scaled version of the sheet to save time scaling
+  def generate_scaled_sheet(self, sheet : str, scale : float) -> None:
+    surf = self.sheets[sheet]['1']
+    w, h = surf.get_size()
+    n_size = w * scale, h * scale
+
+    scale_key = str(scale)
+    scaled_surf = Surface(n_size)
+    scaled_surf.blit(pygame.transform.scale(surf, n_size), (0, 0))
+    scaled_surf.set_colorkey(TRANSPARENT_COLOR)
+
+    self.sheets[sheet][scale_key] = scaled_surf
+
+  def get_surf(self, sheet : str, coords : tuple, scale : float = 1) -> Surface:
+    scale_key = str(scale)
+
+    # add scaled surf to sheet dict    
+    if scale_key not in self.sheets[sheet]:
+
+      w, h = self.sheets[sheet]['1'].get_size()
+      surf = Surface((w* scale, h * scale))
+
+      self.sheets[sheet][scale_key] = surf
+
+    # scale coords
+    coords = list(coords)
+    for i in range(len(coords)):
+      coords[i] *= scale
+
+    return self.sheets[sheet][scale_key].subsurface(coords)

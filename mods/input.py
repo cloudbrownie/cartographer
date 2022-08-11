@@ -87,13 +87,26 @@ class Input:
 
         if event.button == 1:
 
-          if mx <= self.glob.tbar_width and self.glob.window.hov_sheet:
-            self.glob.window.sel_sheet = self.glob.window.hov_sheet
+          if mx <= self.glob.tbar_width:
+            window = self.glob.window
+          
+            if my <= window.div_height and window.hov_sheet:
+              window.sel_sheet = window.hov_sheet
+
+            elif my >= window.div_height and window.hov_tex:
+              window.sel_tex = window.hov_tex
+
+        elif event.button == 3:
+
+          if self.glob.window.sel_tex:
+            self.glob.window.sel_tex = None
+
 
     # move the scroll target with the arrows
     for key in self.arrow_bools:
       if self.arrow_bools[key]:
         dt = self.glob.clock.dt
         cam_speed = self.glob.cam_speed
-        self.glob.scroll_t[0] += self.arrow_vals[key][0] * cam_speed * dt
-        self.glob.scroll_t[1] += self.arrow_vals[key][1] * cam_speed * dt
+        zoom = self.glob.cam_zoom
+        self.glob.scroll_t[0] += self.arrow_vals[key][0] * cam_speed * dt * zoom
+        self.glob.scroll_t[1] += self.arrow_vals[key][1] * cam_speed * dt * zoom

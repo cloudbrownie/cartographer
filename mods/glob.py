@@ -23,6 +23,15 @@ class Glob:
       'a_comp':hex_to_rgb('950740')
     }
 
+    self.cam_zoom_i = 2
+    self.tex_zoom_i = 3
+    self.zoom_vals = [0.25, 0.5, 1, 2, 4]
+    self.orig_cam_size = w_width * 0.8, w_height
+    self.cam_size = [w_width * 0.8 * self.cam_zoom, w_height * self.cam_zoom]
+    self.scroll_t = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
+    self.scroll = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
+    self.cam_speed = 10
+
     self.chunks = Chunks()
     self.sheets = Sheets()
     font_size = 20
@@ -31,14 +40,22 @@ class Glob:
     self.input = Input(self)
     self.clock = Clock()
 
-    self.cam_zoom = 1
-    self.cam_size = [w_width * 0.8, w_height]
-    self.scroll_t = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
-    self.scroll = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
+    for sheet in self.sheets.sheet_names:
+      for zoom_val in self.zoom_vals:
+       self.sheets.generate_scaled_sheet(sheet, zoom_val)
 
     self.tbar_width = w_width * 0.2
 
-    self.cam_speed = 10
+
+  # returns the current camera zoom value
+  @property
+  def cam_zoom(self) -> float:
+    return self.zoom_vals[self.cam_zoom_i]
+
+  # returns the current texture zoom value
+  @property
+  def tex_zoom(self) -> float:
+    return self.zoom_vals[self.tex_zoom_i]
 
   # called each frame to update global stuff
   def update(self) -> None:
