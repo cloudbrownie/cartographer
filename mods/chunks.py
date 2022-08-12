@@ -1,4 +1,3 @@
-
 # returns if a value is in bounds
 def is_inbounds(p : tuple, l : float, r : float, t : float, b : float) -> bool:
   return l <= p[0] <= r and t <= p[1] <= b
@@ -11,9 +10,10 @@ class Chunks:
     self.sheet_refs = {}
     self.sheet_id = 0
 
-    self.chunk_size = 8
-    self.tile_size = 16
-    self.chunk_px = self.chunk_size * self.tile_size
+    self.CHUNK_SIZE = 8
+    self.TILE_SIZE = 16
+    self.CHUNK_PX = self.CHUNK_SIZE * self.TILE_SIZE
+    self.SURF_PADDING = 3
 
   # adds a chunk to chunk dict
   def add_chunk(self, tag : str) -> None:
@@ -34,9 +34,19 @@ class Chunks:
   def add_tile_layer(self, tag : str, layer : str) -> None:
     self.chunks[tag]['tiles'][layer] = []
 
+    # sort layers
+    layer = self.chunks[tag]['tiles']
+    items = sorted(layer.items(), key=lambda x : x[0])
+    layer = dict(items)
+
   # adds a decor layer to a chunk
   def add_decor_layer(self, tag : str, layer : str) -> None:
     self.chunks[tag]['decor'][layer] = []
+
+    # sort layers
+    layer = self.chunks[tag]['tiles']
+    items = sorted(layer.items(), key=lambda x : x[0])
+    layer = dict(items)
 
   # adds a sheet refernece to ref dict
   def add_sheet_ref(self, sheetname : str) -> None:
@@ -52,20 +62,38 @@ class Chunks:
     self.add_sheet_ref(sheetname)
     return self.sheet_id
 
+  # cache the chunk surfs
+  def cache_chunk_surfs(self, tag : str, sheets : dict) -> None:
+    
+    for tile_layer in self.chunks[tag]['tiles']:
+      tiles = self.chunks[tag]['tiles'][tile_layer]
+      for tile_data in tiles:
+
+        x, y, sheet_id, sheet_coords = tile_data
+        sheet_name = self.sheet_refs[sheet_id]
+
+        surf = sheets.get_surf(sheet_name, sheet_coords)
+
+        x *= self.TILE_SIZE
+        y *= self.TILE_SIZE
+
+        offsetx, offsety = 0, 0
+
   # converts glob pos to chunk coord
   def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
-    return x // self.chunk_px, y // self.chunk_px
+    return x // self.CHUNK_PX, y // self.CHUNK_PX
+    self.SURF_PADDING = 3
 
   # converts glob pos to tile coord 
   def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
-    return x // self.tile_size, y // self.tile_size
+    return x // self.TILE_SIZE, y // self.TILE_SIZE
 
   # converts tile coord to chunk rel tile coords
   def get_rel_tile_coords(self, x : float, y : float) -> tuple[float, float]:
-    x %= self.chunk_size
-    y %= self.chunk_size
+    x %= self.CHUNK_SIZE
+    y %= self.CHUNK_SIZE
 
-    return max(x, self.chunk_size + x), max(y, self.chunk_size + y)
+    return max(x, self.CHUNK_SIZE + x), max(y, self.CHUNK_SIZE + y)
 
   # formats x and y coords into a chunk tag
   def get_chunk_tag(self, x : float, y : float) -> str:
@@ -142,7 +170,7 @@ class Chunks:
     return
 
   # return a list of chunks from chunk list that are within a specified rect
-  def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list:
+  def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:
     chunks = []
 
     left, right, top, bot = self.get_bounds(rect)
@@ -199,8 +227,8 @@ class Chunks:
         chunk_x, chunk_y = self.deformat_chunk_tag(tag)
         rel_tile_x, rel_tile_y = rel_tile_data[0:2]
 
-        closed_l.append((rel_tile_x + chunk_x * self.chunk_size, 
-                          rel_tile_y + chunk_y * self.chunk_size))
+        closed_l.append((rel_tile_x + chunk_x * self.CHUNK_SIZE, 
+                          rel_tile_y + chunk_y * self.CHUNK_SIZE))
 
 
     if (tile_x, tile_y) not in closed_l:
@@ -243,8 +271,8 @@ class Chunks:
         for tile_data in self.chunks[tag]['tiles'][layer]:
           rel_x, rel_y = tile_data[0:2]
 
-          glob_x = rel_x + cx * self.chunk_size
-          glob_y = rel_y + cy * self.chunk_size
+          glob_x = rel_x + cx * self.CHUNK_SIZE
+          glob_y = rel_y + cy * self.CHUNK_SIZE
 
           if left <= glob_x <= right and top <= glob_y <= bot:
             cull_tiles.append((glob_x, glob_y))

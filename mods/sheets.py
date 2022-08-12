@@ -13,10 +13,6 @@ class Sheets:
 
     }
 
-    self.sheet_coords = {
-
-    }
-
     self.sheet_configs = {
       
     }
@@ -28,11 +24,6 @@ class Sheets:
     for f in files:
       sheet_surf = pygame.image.load(f'input/{f}')
       sheet_surf.set_colorkey(TRANSPARENT_COLOR)
-
-      self.sheets[f] = {
-        '1' : sheet_surf
-      }
-
       textures = []
 
       # find each asset
@@ -52,44 +43,19 @@ class Sheets:
                 if sheet_surf.get_at((j, y)) == (0, 255, 255, 255):
                   h = y - i - 1
                   break
-
-              row.append((j + 1, i + 1, w, h))
+              
+              surf = Surface((w, h))
+              surf.set_colorkey(TRANSPARENT_COLOR)
+              surf.blit(sheet_surf, (0, 0), (j + 1, i + 1, w, h))
+              row.append(surf)
           textures.append(row)
         
-        self.sheet_coords[f] = textures
+        self.sheets[f] = textures
 
   # returns a lsit of all stored sheets
   @property
   def sheet_names(self) -> list[str]:
     return [sheet for sheet in self.sheets]
 
-  # generates a scaled version of the sheet to save time scaling
-  def generate_scaled_sheet(self, sheet : str, scale : float) -> None:
-    surf = self.sheets[sheet]['1']
-    w, h = surf.get_size()
-    n_size = w * scale, h * scale
-
-    scale_key = str(scale)
-    scaled_surf = Surface(n_size)
-    scaled_surf.blit(pygame.transform.scale(surf, n_size), (0, 0))
-    scaled_surf.set_colorkey(TRANSPARENT_COLOR)
-
-    self.sheets[sheet][scale_key] = scaled_surf
-
-  def get_surf(self, sheet : str, coords : tuple, scale : float = 1) -> Surface:
-    scale_key = str(scale)
-
-    # add scaled surf to sheet dict    
-    if scale_key not in self.sheets[sheet]:
-
-      w, h = self.sheets[sheet]['1'].get_size()
-      surf = Surface((w* scale, h * scale))
-
-      self.sheets[sheet][scale_key] = surf
-
-    # scale coords
-    coords = list(coords)
-    for i in range(len(coords)):
-      coords[i] *= scale
-
-    return self.sheets[sheet][scale_key].subsurface(coords)
+  def get_config_vals(self, sheet : str, sheet_coords : tuple) -> tuple:
+    pass

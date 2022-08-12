@@ -1,4 +1,3 @@
-from django.shortcuts import render
 import pygame
 
 from pygame.draw import *
@@ -30,6 +29,10 @@ class Window:
     self.hov_tex = None
     self.sel_tex = None
 
+    self.render_cache = {
+
+    }
+
   # called each frame to render stuff to the window
   def render(self) -> None:
 
@@ -43,6 +46,9 @@ class Window:
 
     # camera stuff -------------------------------------------------------------
     self.camera.fill(main_c)
+
+    # draw all chunks to the camera
+    cam_rect = *scroll, *self.glob.cam_size
 
     # origin indicator
     ind_len = 10 * zoom
@@ -110,31 +116,37 @@ class Window:
     if self.sel_sheet:
       
       tex_zoom = self.glob.tex_zoom
-      sheet_coords = self.glob.sheets.sheet_coords[self.sel_sheet]
+      tex_rows = self.glob.sheets.sheets[self.sel_sheet]
 
       res_x = 10
       res_y = 10
 
       x = res_x
       y = res_y + self.div_height * 1.1
-      for row in sheet_coords:
+      for row in tex_rows:
 
         height = 0
-        for coords in row:
+        for surf in row:
 
-          surf = self.glob.sheets.get_surf(self.sel_sheet, coords, tex_zoom)
-          rect = pygame.Rect(x, y, surf.get_width(), surf.get_height())
+          w, h = surf.get_size()
+          w *= tex_zoom
+          h *= tex_zoom
+          scaled_surf = pygame.Surface((w, h))
+          scaled_surf.blit(scale(surf, (w, h)), (0, 0))
+          scaled_surf.set_colorkey((0, 0, 0))
+
+          rect = pygame.Rect(x, y, w, h)
 
           if rect.collidepoint(mx, my):
-            self.hov_tex = surf
+            self.hov_tex = scaled_surf
 
-          if self.hov_tex == surf:
+          if self.hov_tex == scaled_surf:
             x += 10
 
-          self.window.blit(surf, (x, y))
+          self.window.blit(scaled_surf, (x, y))
 
-          x += surf.get_width() + res_x
-          height = max(height, surf.get_height())
+          x += w + res_x
+          height = max(height, h)
         
         y += height + res_y
         x = res_x

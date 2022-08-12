@@ -56,7 +56,7 @@ class Input:
     if self.e_types[self.e_i] != 'tiles' or self.tools[self.tool_i] != 'draw':
       return mx, my
 
-    return mx // self.glob.chunks.tile_size, my // self.glob.chunks.tile_size
+    return mx // self.glob.chunks.TILE_SIZE, my // self.glob.chunks.TILE_SIZE
 
   # called each frame to handle all events and inputs
   def handle(self) -> None:

@@ -40,12 +40,7 @@ class Glob:
     self.input = Input(self)
     self.clock = Clock()
 
-    for sheet in self.sheets.sheet_names:
-      for zoom_val in self.zoom_vals:
-       self.sheets.generate_scaled_sheet(sheet, zoom_val)
-
     self.tbar_width = w_width * 0.2
-
 
   # returns the current camera zoom value
   @property
