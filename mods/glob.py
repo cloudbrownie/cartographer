@@ -48,11 +48,6 @@ class Glob:
 
     self.tbar_width = w_width * 0.2
 
-    print(self.chunks.chunks)
-    for i in range(8):
-      self.chunks.add_tile(0, 64 - 16 * i, '0', 'grass.png', (3, 0))
-    print(self.chunks.chunks)
-
   # update camera zoom value
   def adjust_cam_zoom(self, val : int) -> None:
     self.cam_zoom_i += val

@@ -84,7 +84,8 @@ class Chunks:
 
   # converts glob pos to chunk coord
   def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
-    return x // self.CHUNK_PX, y // self.CHUNK_PX
+    chunk_size = self.CHUNK_SIZE * self.TILE_SIZE
+    return x // chunk_size, y // chunk_size
 
   # converts glob pos to tile coord 
   def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
@@ -124,15 +125,17 @@ class Chunks:
   # adds a tile to a layer in a chunk
   def add_tile(self, x : float, y : float, layer : str, 
                         sheetname : str, sheet_coords : tuple) -> tuple:
+    # grab tile coordinates and find the relative chunk pos
     tile_coords = self.get_tile_coords(x, y)
-
     rel_coords = self.get_rel_tile_coords(*tile_coords)
 
+    # find chunk and pack tile data
     chunk_x, chunk_y = self.get_chunk_coords(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
     sheet_id = self.get_sheet_id(sheetname)
     tile_data = *rel_coords, sheet_id, sheet_coords
 
+    # case: chunk doesn't already exist
     if tag not in self.chunks:
       self.add_chunk(tag)
       self.add_tile_layer(tag, layer)
@@ -141,16 +144,24 @@ class Chunks:
 
       return tile_coords
 
+    # case: chunk exists but layer does not
     if layer not in self.chunks[tag]['tiles']:
       self.add_tile_layer(tag, layer)
       self.chunks[tag]['tiles'][layer] = [tile_data]
 
+    # case: chunk and layer exist
     elif not self.check_duplicate_tile(tag, layer, tile_data):
       insert_idx = 0
       tile_layer = self.chunks[tag]['tiles'][layer]
-      for o_tile_data in tile_layer:
+      for i, o_tile_data in enumerate(tile_layer):
         if tile_data[1] < o_tile_data[1]:
           break
+
+        # this case actually replaces the current tile and break from the loop
+        elif tile_data[0:2] == o_tile_data[0:2]:
+          tile_layer[i] = tile_data
+          return tile_coords
+
         insert_idx += 1
 
       tile_layer.insert(insert_idx, tile_data)

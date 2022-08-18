@@ -25,6 +25,8 @@ class Input:
 
     self.layer = 0
     self.holding = False
+    self.last_pos = None
+    self.prev_texture = None
 
     self.arrow_bools = {
       K_UP : False,
@@ -53,7 +55,8 @@ class Input:
     if self.entity_type != 'tiles' or self.tool != 'draw':
       return x, y
 
-    return x // self.glob.chunks.TILE_SIZE, y // self.glob.chunks.TILE_SIZE
+    t_size = self.glob.chunks.TILE_SIZE
+    return x // t_size * t_size, y // t_size * t_size
 
   # returns the current entity type
   @property
@@ -119,11 +122,40 @@ class Input:
             elif my >= window.div_height and window.hov_tex:
               window.set_selected_texture(window.hov_tex)
 
+          elif mx > self.glob.tbar_width:
+
+            self.holding = True
+
         elif event.button == 3:
 
           if self.glob.window.sel_tex:
             self.glob.window.sel_tex = None
 
+      elif event.type == MOUSEBUTTONUP:
+
+        if event.button == 1:
+
+          if mx > self.glob.tbar_width:
+            self.holding = False
+
+    # if holding and drawing, add to the chunk's stuff
+    if self.holding:
+      px, py = self.pen_pos
+
+      texture = self.glob.window.sel_tex
+      if self.is_drawing and texture:
+        
+        if self.entity_type == 'tiles' and ((px, py) != self.last_pos or 
+                                                  texture != self.prev_texture):
+    
+          sheet = self.glob.window.sel_sheet
+          sheet_coords = self.glob.window.curr_tex_data
+          curr_layer = str(self.layer)
+
+          self.glob.chunks.add_tile(px, py, curr_layer, sheet, sheet_coords)
+
+          self.last_pos = px, py
+          self.prev_texture = texture
 
     # move the scroll target with the arrows
     for key in self.arrow_bools:

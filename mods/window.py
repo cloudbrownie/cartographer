@@ -15,6 +15,8 @@ class Window:
     self.height = height
     self.div_height = height * 0.2
 
+    pygame.display.set_caption('cartographer')
+
     cw, ch = self.glob.curr_cam_size
 
     self.camera = pygame.Surface((cw, ch))
@@ -78,8 +80,6 @@ class Window:
     sheets = self.glob.sheets.sheets
     render_dict = self.glob.chunks.render_chunks(chunk_tags, sheets)
     chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
-    padded_chunk_size = self.glob.chunks.CHUNK_PX
-    t_size = self.glob.chunks.TILE_SIZE
     pad_offset = self.glob.chunks.SURF_PADDING
 
     for chunk in render_dict:
@@ -95,16 +95,10 @@ class Window:
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.is_drawing():
-
-      t_size = self.glob.chunks.TILE_SIZE
-
       hover_surf = self.sel_tex.copy()
       hover_surf.set_alpha(120)
 
-      tx = px * t_size - scroll[0]
-      ty = py * t_size - scroll[1]
-
-      self.camera.blit(hover_surf, (tx, ty))
+      self.camera.blit(hover_surf, (px - scroll[0], py - scroll[1]))
 
 
     self.window.blit(scale(self.camera, cam_size), (self.glob.tbar_width, 0))
