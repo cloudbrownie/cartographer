@@ -1,3 +1,6 @@
+# tile data format : rel_x, rel_y, sheet_id, sheet_coords
+from pygame import Surface
+
 # returns if a value is in bounds
 def is_inbounds(p : tuple, l : float, r : float, t : float, b : float) -> bool:
   return l <= p[0] <= r and t <= p[1] <= b
@@ -12,8 +15,8 @@ class Chunks:
 
     self.CHUNK_SIZE = 8
     self.TILE_SIZE = 16
-    self.CHUNK_PX = self.CHUNK_SIZE * self.TILE_SIZE
     self.SURF_PADDING = 3
+    self.CHUNK_PX = self.CHUNK_SIZE * self.TILE_SIZE + self.SURF_PADDING * 2
 
   # adds a chunk to chunk dict
   def add_chunk(self, tag : str) -> None:
@@ -82,7 +85,6 @@ class Chunks:
   # converts glob pos to chunk coord
   def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
     return x // self.CHUNK_PX, y // self.CHUNK_PX
-    self.SURF_PADDING = 3
 
   # converts glob pos to tile coord 
   def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
@@ -92,8 +94,11 @@ class Chunks:
   def get_rel_tile_coords(self, x : float, y : float) -> tuple[float, float]:
     x %= self.CHUNK_SIZE
     y %= self.CHUNK_SIZE
-
-    return max(x, self.CHUNK_SIZE + x), max(y, self.CHUNK_SIZE + y)
+    if x < 0:
+      x = self.CHUNK_SIZE + x
+    if y < 0:
+      y = self.CHUNK_SIZE + y
+    return x, y
 
   # formats x and y coords into a chunk tag
   def get_chunk_tag(self, x : float, y : float) -> str:
@@ -122,7 +127,9 @@ class Chunks:
     tile_coords = self.get_tile_coords(x, y)
 
     rel_coords = self.get_rel_tile_coords(*tile_coords)
-    tag = self.get_chunk_tag(x, y)
+
+    chunk_x, chunk_y = self.get_chunk_coords(x, y)
+    tag = self.get_chunk_tag(chunk_x, chunk_y)
     sheet_id = self.get_sheet_id(sheetname)
     tile_data = *rel_coords, sheet_id, sheet_coords
 
@@ -139,7 +146,14 @@ class Chunks:
       self.chunks[tag]['tiles'][layer] = [tile_data]
 
     elif not self.check_duplicate_tile(tag, layer, tile_data):
-      self.chunks[tag]['tiles'][layer].append(tile_data)
+      insert_idx = 0
+      tile_layer = self.chunks[tag]['tiles'][layer]
+      for o_tile_data in tile_layer:
+        if tile_data[1] < o_tile_data[1]:
+          break
+        insert_idx += 1
+
+      tile_layer.insert(insert_idx, tile_data)
 
     return tile_coords
 
@@ -169,6 +183,41 @@ class Chunks:
   def remove_decor(self):
     return
 
+  # returns a dict fill of rendered surfaces of each chunk
+  def render_chunks(self, chunks : list, sheets : dict) -> dict:
+    
+    render_dict = {
+
+    }
+
+    for chunk_tag in chunks:
+      
+      layers = {
+
+      }
+
+      for layer in self.chunks[chunk_tag]['tiles']:
+
+        layer_surf = Surface((self.CHUNK_PX, self.CHUNK_PX))
+        layer_surf.set_colorkey((0, 0, 0))
+
+        for tile_data in self.chunks[chunk_tag]['tiles'][layer]:
+
+          x, y, sheet_id, sheet_coords = tile_data
+          x = x * self.TILE_SIZE + self.SURF_PADDING
+          y = y * self.TILE_SIZE + self.SURF_PADDING
+          sheet_name = self.sheet_refs[sheet_id]
+          tile_surf = sheets[sheet_name][sheet_coords[0]][sheet_coords[1]]
+
+          layer_surf.blit(tile_surf, (x, y))
+        
+        layers[layer] = layer_surf
+
+      render_dict[chunk_tag] = layers
+
+    return render_dict
+
+
   # return a list of chunks from chunk list that are within a specified rect
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:
     chunks = []
@@ -191,7 +240,11 @@ class Chunks:
   def get_bounds(self, rect : list) -> list:
     left, top = self.get_tile_coords(rect[0], rect[1])
     right, bot = self.get_tile_coords(rect[0] + rect[2], rect[1] + rect[3])
-    return left, right, top, bot
+    left -= self.CHUNK_SIZE
+    top -= self.CHUNK_SIZE
+    right += 1
+    bot += 1
+    return int(left), int(right), int(top), int(bot)
 
   # flood files an area with tiles
   def flood(self, pos : tuple, layer : str, sheet_data : tuple, 
@@ -280,7 +333,7 @@ class Chunks:
   # returns a list of connected tiles on point
   def mask_select(self, x : float, y : float, layer : str, rect : list) -> list:
     tile_x, tile_y = self.get_tile_coords(x, y)
-
+    
     open_l = [(tile_x, tile_y)]
     closed_l = []
 
@@ -289,6 +342,24 @@ class Chunks:
       right = top = float('inf')
     else:
       left, right, top, bot = self.get_bounds(rect)
+
+
+    chunks = self.get_chunks(rect, skip_empty=True)
+    tiles = []
+    for chunk_tag in chunks:
+      if layer not in self.chunks[chunk_tag]:
+        continue
+
+      chunk_x, chunk_y = self.deformat_chunk_tag(chunk_tag)
+
+      layer_tiles = self.chunks[chunk_tag]['tiles'][layer]
+      for tile_data in layer_tiles:
+        rel_x, rel_y = tile_data[0:2]
+        
+        unrel_x = chunk_x * self.CHUNK_SIZE + rel_x
+        unrel_y = chunk_y * self.CHUNK_SIZE + rel_y
+
+        tiles.append((unrel_x, unrel_y))
 
     while len(open_l) > 0:
       curr_x, curr_y = open_l.pop(0)
@@ -299,7 +370,7 @@ class Chunks:
         if n_pos in closed_l or not is_inbounds(n_pos, left, right, top, bot):
           continue
 
-        if n_pos not in open_l:
+        if n_pos not in open_l and n_pos in tiles:
           open_l.append(n_pos)
 
       closed_l.append((curr_x, curr_y))

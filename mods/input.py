@@ -13,11 +13,6 @@ class Input:
 
     self.sel_box = [None, None]
 
-    self.mods = {
-      K_LSHIFT : False,
-      K_LCTRL : False,
-    }
-
     self.mouse_pos = 0, 0
 
     self.cursor = pygame.Rect(0, 0, 5, 5)
@@ -49,20 +44,39 @@ class Input:
   @property
   def pen_pos(self) -> tuple[float, float]:
     scroll = self.glob.scroll
+    ratio = self.glob.window.camera_ratio
     zoom = self.glob.cam_zoom
-    mx = (self.mouse_pos[0] - self.glob.tbar_width) * zoom + scroll[0]
-    my = self.mouse_pos[1] * zoom + scroll[1]
+    mx, my = self.mouse_pos
+    x = (mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0]
+    y = my * ratio[1] * zoom + scroll[1]
 
-    if self.e_types[self.e_i] != 'tiles' or self.tools[self.tool_i] != 'draw':
-      return mx, my
+    if self.entity_type != 'tiles' or self.tool != 'draw':
+      return x, y
 
-    return mx // self.glob.chunks.TILE_SIZE, my // self.glob.chunks.TILE_SIZE
+    return x // self.glob.chunks.TILE_SIZE, y // self.glob.chunks.TILE_SIZE
+
+  # returns the current entity type
+  @property
+  def entity_type(self) -> str:
+    return self.e_types[self.e_i]
+
+  # returns the current tool
+  @property
+  def tool(self) -> str:
+    return self.tools[self.tool_i]
+
+  # returns if the input is currently drawing
+  def is_drawing(self) -> bool:
+    return self.tool == 'draw'
 
   # called each frame to handle all events and inputs
   def handle(self) -> None:
 
     mx, my = pygame.mouse.get_pos()
     self.mouse_pos = mx, my
+
+    keys = pygame.key.get_pressed()
+    ctrl = keys[K_LCTRL]
 
     # handle each event
     for event in pygame.event.get():
@@ -71,12 +85,21 @@ class Input:
         sys.exit()
 
       elif event.type == KEYDOWN:
+
         if event.key == K_ESCAPE:
           pygame.quit()
           sys.exit()
 
-        elif event.key in self.arrow_bools.keys():
+        elif event.key in self.arrow_bools.keys() and not ctrl:
           self.arrow_bools[event.key] = True
+
+        elif event.key in [K_UP, K_DOWN] and ctrl:
+          vals = {
+            K_UP: -1,
+            K_DOWN: 1
+          }
+
+          self.glob.adjust_cam_zoom(vals[event.key])
 
       elif event.type == KEYUP:
 
@@ -91,10 +114,10 @@ class Input:
             window = self.glob.window
           
             if my <= window.div_height and window.hov_sheet:
-              window.sel_sheet = window.hov_sheet
+              window.set_selected_sheet(window.hov_sheet)
 
             elif my >= window.div_height and window.hov_tex:
-              window.sel_tex = window.hov_tex
+              window.set_selected_texture(window.hov_tex)
 
         elif event.button == 3:
 

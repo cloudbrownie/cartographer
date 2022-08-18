@@ -26,10 +26,16 @@ class Glob:
     self.cam_zoom_i = 2
     self.tex_zoom_i = 3
     self.zoom_vals = [0.25, 0.5, 1, 2, 4]
-    self.orig_cam_size = w_width * 0.8, w_height
-    self.cam_size = [w_width * 0.8 * self.cam_zoom, w_height * self.cam_zoom]
-    self.scroll_t = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
-    self.scroll = [-self.cam_size[0] / 2, -self.cam_size[1] / 2]
+    self.cam_scale_size = w_width * 0.8, w_height
+    self.cam_zoom = self.zoom_vals[self.cam_zoom_i]
+    self.cam_zoom_t = self.cam_zoom
+
+    self.base_cam_size = w_width * 0.8 / 2, w_height / 2
+    self.curr_cam_size = self.base_cam_size
+    self.scroll_t = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
+    self.scroll = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
+    self.SCROLL_TOL = 0.01
+    self.ZOOM_TOL = 0.001
     self.cam_speed = 10
 
     self.chunks = Chunks()
@@ -42,10 +48,17 @@ class Glob:
 
     self.tbar_width = w_width * 0.2
 
-  # returns the current camera zoom value
-  @property
-  def cam_zoom(self) -> float:
-    return self.zoom_vals[self.cam_zoom_i]
+    print(self.chunks.chunks)
+    for i in range(8):
+      self.chunks.add_tile(0, 64 - 16 * i, '0', 'grass.png', (3, 0))
+    print(self.chunks.chunks)
+
+  # update camera zoom value
+  def adjust_cam_zoom(self, val : int) -> None:
+    self.cam_zoom_i += val
+    self.cam_zoom_i %= len(self.zoom_vals)
+    self.cam_zoom_i = max(self.cam_zoom_i, 0)
+    self.cam_zoom_t = self.zoom_vals[self.cam_zoom_i]
 
   # returns the current texture zoom value
   @property
@@ -56,5 +69,21 @@ class Glob:
   def update(self) -> None:
 
     # update the scroll value
-    self.scroll[0] += (self.scroll_t[0] - self.scroll[0]) / 5 * self.clock.dt
-    self.scroll[1] += (self.scroll_t[1] - self.scroll[1]) / 5 * self.clock.dt
+    if self.scroll[0] != self.scroll_t[0]:
+      self.scroll[0] += (self.scroll_t[0] - self.scroll[0]) / 5 * self.clock.dt
+      if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
+        self.scroll[0] = self.scroll_t[0]
+
+    if self.scroll[1] != self.scroll_t[1]:
+      self.scroll[1] += (self.scroll_t[1] - self.scroll[1]) / 5 * self.clock.dt
+      if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
+        self.scroll[1] = self.scroll_t[1]
+
+    self.window.camera_rect.topleft = self.scroll
+
+    # adjust camera size
+    if self.cam_zoom != self.cam_zoom_t:
+      self.cam_zoom += (self.cam_zoom_t - self.cam_zoom) / 15 * self.clock.dt 
+      if abs(self.cam_zoom - self.cam_zoom_t) <= self.ZOOM_TOL:
+        self.cam_zoom = self.cam_zoom_t
+      self.window.update_camera_size()
