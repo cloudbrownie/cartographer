@@ -42,6 +42,10 @@ class Chunks:
     items = sorted(layer.items(), key=lambda x : x[0])
     layer = dict(items)
 
+  # removes a tile layer from a chunk
+  def remove_tile_layer(self, tag : str, layer : str) -> None:
+    del self.chunks[tag]['tiles'][layer]
+
   # adds a decor layer to a chunk
   def add_decor_layer(self, tag : str, layer : str) -> None:
     self.chunks[tag]['decor'][layer] = []
@@ -50,6 +54,10 @@ class Chunks:
     layer = self.chunks[tag]['tiles']
     items = sorted(layer.items(), key=lambda x : x[0])
     layer = dict(items)
+
+  # removes a decor layer from a chunk
+  def remove_decor_layer(self, tag : str, layer : str) -> None:
+    del self.chunks[tag]['decor'][layer]
 
   # adds a sheet refernece to ref dict
   def add_sheet_ref(self, sheetname : str) -> None:
@@ -187,7 +195,6 @@ class Chunks:
 
     return r_tile_coords
 
-
   def add_decor(self):
     return
 
@@ -229,7 +236,6 @@ class Chunks:
 
     return render_dict
 
-
   # return a list of chunks from chunk list that are within a specified rect
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:
     chunks = []
@@ -257,6 +263,34 @@ class Chunks:
     right += 1
     bot += 1
     return int(left), int(right), int(top), int(bot)
+
+  # prunes the current chunks, removes all empty layers and empty chunks
+  def prune(self) -> None:
+
+    for chunk_tag in list(self.chunks.keys()):
+
+      chunk = self.chunks[chunk_tag]
+
+      # pre check if chunk is empty
+      if not chunk['tiles'] and not chunk['decor']:
+        del self.chunks[chunk_tag]
+        continue
+
+      # can't delete during iteration
+
+      # delete empty tile layers
+      for tile_layer in list(chunk['tiles'].keys()):
+        if not chunk['tiles'][tile_layer]:
+          del chunk['tiles'][tile_layer]
+
+      # delete empty decor layers
+      for decor_layer in list(chunk['decor'].keys()):
+        if not chunk['decor'][decor_layer]:
+          del chunk['decor'][decor_layer]
+
+      # post check if chunk is empty
+      if not chunk['tiles'] and not chunk['decor']:
+        del self.chunks[chunk_tag]
 
   # flood files an area with tiles
   def flood(self, pos : tuple, layer : str, sheet_data : tuple, 

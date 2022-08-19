@@ -94,6 +94,9 @@ class Window:
         surf = render_dict[chunk][layer]
         self.camera.blit(surf, (x, y))
 
+      padded_s = self.glob.chunks.CHUNK_PX
+      pygame.draw.rect(self.camera, accent_c, (x, y, padded_s, padded_s), 1)
+
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
       hover_surf = self.sel_tex.copy()

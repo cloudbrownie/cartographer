@@ -5,6 +5,8 @@ from mods.input import Input
 from mods.clock import Clock
 from mods.font import Font
 
+from time import time
+
 def hex_to_rgb(hex_code : str) -> tuple:
   if '#' in hex_code:
     hex_code.replace('#', '')
@@ -47,6 +49,8 @@ class Glob:
     self.clock = Clock()
 
     self.tbar_width = w_width * 0.2
+    self.last_chunk_prune = 0
+    self.CHUNK_PRUNE_TIME = 30
 
   # update camera zoom value
   def adjust_cam_zoom(self, val : int) -> None:
@@ -82,3 +86,8 @@ class Glob:
       if abs(self.cam_zoom - self.cam_zoom_t) <= self.ZOOM_TOL:
         self.cam_zoom = self.cam_zoom_t
       self.window.update_camera_size()
+
+    # prune the chunks regularly
+    if time() - self.last_chunk_prune >= self.CHUNK_PRUNE_TIME:
+      self.chunks.prune()
+      self.last_chunk_prune = time()
