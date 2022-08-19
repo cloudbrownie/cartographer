@@ -1,3 +1,4 @@
+from tkinter import Y
 import pygame
 
 from pygame.draw import *
@@ -244,5 +245,10 @@ class Window:
 
     curr_x, curr_y = self.camera_rect.topleft
 
-    self.glob.scroll_t[0] += curr_x - prev_x
-    self.glob.scroll_t[1] ++ curr_y - prev_y
+    x_scroll_dif = curr_x - prev_x
+    y_scroll_dif = curr_y - prev_y
+
+    self.glob.scroll[0] += x_scroll_dif
+    self.glob.scroll[1] += y_scroll_dif
+    self.glob.scroll_t[0] += x_scroll_dif
+    self.glob.scroll_t[1] += y_scroll_dif

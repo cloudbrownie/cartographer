@@ -51,7 +51,7 @@ class Glob:
   # update camera zoom value
   def adjust_cam_zoom(self, val : int) -> None:
     self.cam_zoom_i += val
-    self.cam_zoom_i %= len(self.zoom_vals)
+    self.cam_zoom_i = min(self.cam_zoom_i, len(self.zoom_vals) - 1)
     self.cam_zoom_i = max(self.cam_zoom_i, 0)
     self.cam_zoom_t = self.zoom_vals[self.cam_zoom_i]
 
