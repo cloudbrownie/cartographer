@@ -170,15 +170,16 @@ class Chunks:
 
   # removes a tile from a layer in a chunk
   def remove_tile(self, x : float, y : float, layer : str) -> None:
-    tag = self.get_chunk_tag(x, y)
+    chunk_x, chunk_y = self.get_chunk_coords(x, y)
+    tag = self.get_chunk_tag(chunk_x, chunk_y)
 
     if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
       return
 
     tile_coords = self.get_tile_coords(x, y)
-    rel_coords = list(self.get_rel_tile_coords(*tile_coords))
+    rel_coords = self.get_rel_tile_coords(*tile_coords)
     r_tile_coords = None
-    for tile_data, i in enumerate(self.chunks[tag]['tiles'][layer]):
+    for i, tile_data in enumerate(self.chunks[tag]['tiles'][layer]):
       if tile_data[0:2] == rel_coords:
         r_tile_coords = rel_coords
         self.chunks[tag]['tiles'][layer].pop(i)

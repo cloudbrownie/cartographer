@@ -95,7 +95,7 @@ class Window:
         self.camera.blit(surf, (x, y))
 
     # draw tile highlight at current pen position
-    if self.sel_tex and self.glob.input.is_drawing():
+    if self.sel_tex and self.glob.input.tool == 'draw':
       hover_surf = self.sel_tex.copy()
       hover_surf.set_alpha(120)
 
@@ -109,7 +109,7 @@ class Window:
 
     # render info
     info = f'''
-    {self.glob.window.sel_sheet}
+    {self.sel_sheet}
     {px}, {py}
     {scroll[0] : .1f}, {scroll[1] : .1f}
     {tool}

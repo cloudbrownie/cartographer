@@ -68,10 +68,6 @@ class Input:
   def tool(self) -> str:
     return self.tools[self.tool_i]
 
-  # returns if the input is currently drawing
-  def is_drawing(self) -> bool:
-    return self.tool == 'draw'
-
   # called each frame to handle all events and inputs
   def handle(self) -> None:
 
@@ -104,6 +100,16 @@ class Input:
 
           self.glob.adjust_cam_zoom(vals[event.key])
 
+        elif event.key == K_1:
+          self.tool_i = 0
+
+        elif event.key == K_2:
+          self.tool_i = 1
+
+        elif event.key == K_3:
+          self.tool_i = 2
+
+
       elif event.type == KEYUP:
 
         if event.key in self.arrow_bools.keys():
@@ -135,15 +141,16 @@ class Input:
 
         if event.button == 1:
 
-          if mx > self.glob.tbar_width:
-            self.holding = False
+          self.holding = False
+          self.last_pos = None
+          self.prev_texture = None
 
     # if holding and drawing, add to the chunk's stuff
     if self.holding:
       px, py = self.pen_pos
 
       texture = self.glob.window.sel_tex
-      if self.is_drawing and texture:
+      if self.tool == 'draw' and texture:
         
         if self.entity_type == 'tiles' and ((px, py) != self.last_pos or 
                                                   texture != self.prev_texture):
@@ -156,6 +163,14 @@ class Input:
 
           self.last_pos = px, py
           self.prev_texture = texture
+
+      elif self.tool == 'erase':
+
+        if self.entity_type == 'tiles' and (px, py) != self.last_pos:
+
+          self.glob.chunks.remove_tile(px, py, str(self.layer))
+          self.last_pos = px, py
+
 
     # move the scroll target with the arrows
     for key in self.arrow_bools:
