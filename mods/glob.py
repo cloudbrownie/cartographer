@@ -5,7 +5,13 @@ from mods.input import Input
 from mods.clock import Clock
 from mods.font import Font
 
+import os, sys
+
+from multiprocessing import Process, Queue
 from time import time
+from random import randint
+
+from mods.chunks import is_inbounds
 
 def hex_to_rgb(hex_code : str) -> tuple:
   if '#' in hex_code:
@@ -15,6 +21,98 @@ def hex_to_rgb(hex_code : str) -> tuple:
     rgb.append(int(hex_code[i*2:2+i*2], 16))
 
   return tuple(rgb)
+
+DONE = 1
+
+# flooding function
+def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, 
+                                                          rect : list) -> None:
+  tile_x, tile_y = pos
+  chunk_x, chunk_y = chunks.get_chunk_coords(*pos)
+  tag = chunks.get_chunk_tag(chunk_x, chunk_y)
+
+  rel_coords = chunks.get_rel_tile_coords(tile_x, tile_y)
+
+  if tag in chunks.chunks and layer in chunks.chunks[tag]['tiles']:
+    for tile_data in chunks.chunks[tag]['tiles'][layer]:
+      if tile_data[0:2] == rel_coords:
+        return 
+
+  left, right, top, bot = chunks.get_bounds(rect)
+
+  if not (left <= tile_x <= right) or not (top <= tile_y <= bot):
+    return
+
+  open_l = [(tile_x, tile_y)]
+  closed_l = []
+
+  if tag in chunks.chunks:
+    for tile_data in chunks.chunks[tag]['tiles'][layer]:
+      closed_l.append(tile_data[0:2])
+
+  for o_tag in chunks.get_chunks(rect):
+    if layer not in chunks.chunks[o_tag]['tiles']:
+      continue
+
+    for rel_tile_data in chunks.chunks[o_tag]['tiles'][layer]:
+      chunk_x, chunk_y = chunks.deformat_chunk_tag(o_tag)
+      rel_tile_x, rel_tile_y = rel_tile_data[0:2]
+
+      o_tile_x = rel_tile_x + chunk_x * chunks.CHUNK_SIZE
+      o_tile_y = rel_tile_y + chunk_y * chunks.CHUNK_SIZE
+
+      closed_l.append((o_tile_x, o_tile_y))
+
+  if (tile_x, tile_y) in closed_l:
+    return
+
+  q.put((tile_x, tile_y))
+  count = 0
+
+  while len(open_l) > 0:
+    curr_x, curr_y = open_l.pop(0)
+
+    for nx, ny in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+      n_pos = curr_x + nx, curr_y + ny
+
+      if n_pos in closed_l or not is_inbounds(n_pos, left, right, top, bot):
+        continue
+
+      if n_pos not in open_l:
+        open_l.insert(count, n_pos)
+
+    closed_l.append((curr_x, curr_y))
+    q.put((curr_x, curr_y))
+    count = (count + 1) % 3
+
+  q.put(DONE)
+
+# culling function
+def cull(e_type : str, layer : str, chunks : Chunks, q : Queue,
+                                                           rect : list) -> None:
+  bound_chunks = chunks.get_chunks(rect, skip_empty=True)
+  n = 0
+
+  if e_type == 'tiles':
+
+    left, right, top, bot = chunks.get_bounds(rect)
+    for tag in bound_chunks:
+      if layer not in chunks.chunks[tag]['tiles']:
+        continue
+
+      cx, cy = chunks.deformat_chunk_tag(tag)
+      for tile_data in chunks.chunks[tag]['tiles'][layer]:
+        rel_x, rel_y = tile_data[0:2]
+
+        glob_x = rel_x + cx * chunks.CHUNK_SIZE
+        glob_y = rel_y + cy * chunks.CHUNK_SIZE
+
+        if left <= glob_x <= right and top <= glob_y <= bot:
+          q.put((glob_x, glob_y))
+          n += 1
+
+  q.put(DONE)
+
 
 class Glob:
   # init
@@ -27,7 +125,7 @@ class Glob:
 
     self.cam_zoom_i = 2
     self.tex_zoom_i = 3
-    self.zoom_vals = [0.25, 0.5, 1, 2, 4]
+    self.zoom_vals = [0.25, 0.5, 1, 2, 4, 8]
     self.cam_scale_size = w_width * 0.8, w_height
     self.cam_zoom = self.zoom_vals[self.cam_zoom_i]
     self.cam_zoom_t = self.cam_zoom
@@ -52,6 +150,37 @@ class Glob:
     self.last_chunk_prune = 0
     self.CHUNK_PRUNE_TIME = 30
 
+    self.chunk_processes = {
+      'flood':[],
+      'cull':[],
+      'auto-tile':[]
+    }
+
+  # creates a process for flood filling in the chunk system
+  def start_flood(self, pos : tuple, layer : str, rect : list, sheet_name : str,
+                                                  sheet_coords : tuple) -> None:
+
+    queue = Queue()
+
+    process = Process(target=flood, args=(pos, layer, self.chunks, queue, rect))
+    process.daemon = True
+    process.start()
+
+    process_data = process, queue, layer, sheet_name, sheet_coords
+    self.chunk_processes['flood'].append(process_data)
+
+  # creates a process for culling tiles in the chunk system
+  def start_cull(self, e_type : str, layer : str, rect : list) -> None:
+    queue = Queue()
+
+    process = Process(target=cull, args=[e_type, layer, self.chunks, queue, 
+                                                                          rect])
+    process.daemon = True
+    process.start()
+
+    process_data = process, queue, layer
+    self.chunk_processes['cull'].append(process_data)
+
   # update camera zoom value
   def adjust_cam_zoom(self, val : int) -> None:
     self.cam_zoom_i += val
@@ -69,12 +198,16 @@ class Glob:
 
     # update the scroll value
     if self.scroll[0] != self.scroll_t[0]:
-      self.scroll[0] += (self.scroll_t[0] - self.scroll[0]) / 5 * self.clock.dt
+      d_scroll = (self.scroll_t[0] - self.scroll[0]) / 5
+      d_scroll = min(d_scroll, d_scroll * self.clock.dt)
+      self.scroll[0] += d_scroll
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[0] = self.scroll_t[0]
 
     if self.scroll[1] != self.scroll_t[1]:
-      self.scroll[1] += (self.scroll_t[1] - self.scroll[1]) / 5 * self.clock.dt
+      d_scroll = (self.scroll_t[1] - self.scroll[1]) / 5
+      d_scroll = min(d_scroll, d_scroll * self.clock.dt)
+      self.scroll[1] += d_scroll
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[1] = self.scroll_t[1]
 
@@ -91,3 +224,38 @@ class Glob:
     if time() - self.last_chunk_prune >= self.CHUNK_PRUNE_TIME:
       self.chunks.prune()
       self.last_chunk_prune = time()
+
+    # add tiles from flood processes
+    for i, process_data in enumerate(self.chunk_processes['flood']):
+      
+      process, queue, layer, sheet_name, sheet_coords = process_data
+
+      n_items = queue.qsize()
+      for _ in range(min(n_items, 10)):
+        queue_item = queue.get()
+        if queue_item == DONE:      
+          self.chunk_processes['flood'].pop(i)
+          process.terminate()
+          queue.close()
+          queue.join_thread()
+          break
+        else:
+          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords)
+
+    # remove tiles from cull process
+    for i, process_data in enumerate(self.chunk_processes['cull']):
+      
+      process, queue, layer = process_data
+
+      n_items = queue.qsize()
+      for _ in range(min(n_items, 10)):
+        queue_item = queue.get()
+        if queue_item == DONE:
+          self.chunk_processes['cull'].pop(i)
+          process.terminate()
+          queue.close()
+          queue.join_thread()
+          break
+        else:
+          self.chunks.remove_tile(*queue_item, layer)
+

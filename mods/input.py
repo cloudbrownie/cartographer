@@ -1,6 +1,7 @@
 import pygame, sys
 
 from pygame.locals import *
+from math import floor, ceil
 
 class Input:
   # init
@@ -11,7 +12,8 @@ class Input:
 
     self.glob = glob
 
-    self.sel_box = [None, None]
+    self.sel_rect = []
+    self.SEL_RECT_THRESOLD = 64
 
     self.mouse_pos = 0, 0
 
@@ -42,6 +44,8 @@ class Input:
       K_RIGHT : (1, 0)
     }
 
+    self.selected_tiles = []
+
   # returns the pen position relative to camera
   @property
   def pen_pos(self) -> tuple[float, float]:
@@ -49,14 +53,14 @@ class Input:
     ratio = self.glob.window.camera_ratio
     zoom = self.glob.cam_zoom
     mx, my = self.mouse_pos
-    x = (mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0]
-    y = my * ratio[1] * zoom + scroll[1]
+    x = round((mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0], 2)
+    y = round(my * ratio[1] * zoom + scroll[1])
 
-    if self.entity_type != 'tiles' or self.tool != 'draw':
+    if self.entity_type != 'tiles' or self.tool == 'select':
       return x, y
 
     t_size = self.glob.chunks.TILE_SIZE
-    return x // t_size * t_size, y // t_size * t_size
+    return x // t_size, y // t_size
 
   # returns the current entity type
   @property
@@ -67,6 +71,35 @@ class Input:
   @property
   def tool(self) -> str:
     return self.tools[self.tool_i]
+
+  # returns the normalized selection rect
+  @property
+  def selection_rect(self) -> list:
+    if len(self.sel_rect) < 2:
+      return 0, 0, 0, 0
+
+    if len(self.sel_rect) == 1:
+      p2 = self.pen_pos
+    else:
+      p2 = self.sel_rect[1]
+
+    left, top, right, bot = *self.sel_rect[0], *p2
+    if right < left:
+      left, right = right, left
+    if bot < top:
+      top, bot = bot, top
+
+    w = right - left
+    h = bot - top
+    if w * h < self.SEL_RECT_THRESOLD:
+      return 0, 0, 0, 0
+
+    return left, top, w, h
+
+  # returns if the current selection rect is valid
+  def has_valid_sel_rect(self) -> bool:
+    w, h = self.selection_rect[2:4]
+    return w * h >= self.SEL_RECT_THRESOLD
 
   # called each frame to handle all events and inputs
   def handle(self) -> None:
@@ -86,8 +119,11 @@ class Input:
       elif event.type == KEYDOWN:
 
         if event.key == K_ESCAPE:
-          pygame.quit()
-          sys.exit()
+          if self.has_valid_sel_rect():
+            self.sel_rect = []
+          else:
+            pygame.quit()
+            sys.exit()
 
         elif event.key in self.arrow_bools.keys() and not ctrl:
           self.arrow_bools[event.key] = True
@@ -109,6 +145,25 @@ class Input:
         elif event.key == K_3:
           self.tool_i = 2
 
+        elif event.key == K_f and self.entity_type == 'tiles' and \
+                                                      self.glob.window.sel_tex:
+          if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
+            rect = self.selection_rect
+          else:
+            rect = self.glob.window.camera_rect
+          pos = self.pen_pos
+          str_layer = str(self.layer)
+          sheet_name = self.glob.window.sel_sheet
+          sheet_coords = self.glob.window.curr_tex_data
+          self.glob.start_flood(pos, str_layer, rect, sheet_name, sheet_coords)
+
+        elif event.key == K_d and self.entity_type == 'tiles':
+
+          if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
+            rect = self.selection_rect
+          else:
+            rect = self.glob.window.camera_rect
+          self.glob.start_cull(self.entity_type, str(self.layer), rect)
 
       elif event.type == KEYUP:
 
@@ -130,7 +185,18 @@ class Input:
 
           elif mx > self.glob.tbar_width:
 
-            self.holding = True
+            if self.tool == 'select':
+              self.sel_rect = [self.pen_pos]
+
+            elif ctrl:
+              px, py = self.pen_pos
+              str_layer = str(self.layer)
+              rect = self.glob.window.camera_rect
+              self.selected_tiles = self.glob.chunks.mask_select(px, py, 
+                                                                str_layer, rect)
+
+            else:
+              self.holding = True
 
         elif event.button == 3:
 
@@ -144,6 +210,20 @@ class Input:
           self.holding = False
           self.last_pos = None
           self.prev_texture = None
+          
+          if mx > self.glob.tbar_width and self.tool == 'select':
+            self.sel_rect.append(self.pen_pos)
+
+            if not self.has_valid_sel_rect:
+              self.sel_rect = []
+            elif self.entity_type == 'tiles':
+              left, top, right, bot = *self.sel_rect[0], *self.sel_rect[1]
+              t_size = self.glob.chunks.TILE_SIZE
+              left = floor(left / t_size) * t_size
+              top = floor(top / t_size) * t_size
+              right = ceil(right / t_size) * t_size - 1
+              bot = ceil(bot / t_size) * t_size - 1
+              self.sel_rect = [(left, top), (right, bot)]
 
     # if holding and drawing, add to the chunk's stuff
     if self.holding:

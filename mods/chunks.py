@@ -18,6 +18,10 @@ class Chunks:
     self.SURF_PADDING = 3
     self.CHUNK_PX = self.CHUNK_SIZE * self.TILE_SIZE + self.SURF_PADDING * 2
 
+    self.render_cache = {}
+
+    self.re_render = []
+
   # adds a chunk to chunk dict
   def add_chunk(self, tag : str) -> None:
     self.chunks[tag] = {
@@ -60,17 +64,17 @@ class Chunks:
     del self.chunks[tag]['decor'][layer]
 
   # adds a sheet refernece to ref dict
-  def add_sheet_ref(self, sheetname : str) -> None:
+  def add_sheet_ref(self, sheet_name : str) -> None:
     self.sheet_id += 1
-    self.sheet_refs[self.sheet_id] = sheetname
+    self.sheet_refs[self.sheet_id] = sheet_name
 
   # grabs ref id for sheet from ref dict
-  def get_sheet_id(self, sheetname : str) -> int:
+  def get_sheet_id(self, sheet_name : str) -> int:
     for sheet_id in self.sheet_refs:
-      if self.sheet_refs[sheet_id] == sheetname:
+      if self.sheet_refs[sheet_id] == sheet_name:
         return sheet_id
 
-    self.add_sheet_ref(sheetname)
+    self.add_sheet_ref(sheet_name)
     return self.sheet_id
 
   # cache the chunk surfs
@@ -92,8 +96,7 @@ class Chunks:
 
   # converts glob pos to chunk coord
   def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
-    chunk_size = self.CHUNK_SIZE * self.TILE_SIZE
-    return x // chunk_size, y // chunk_size
+    return x // self.CHUNK_SIZE, y // self.CHUNK_SIZE
 
   # converts glob pos to tile coord 
   def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
@@ -132,15 +135,15 @@ class Chunks:
 
   # adds a tile to a layer in a chunk
   def add_tile(self, x : float, y : float, layer : str, 
-                        sheetname : str, sheet_coords : tuple) -> tuple:
+                        sheet_name : str, sheet_coords : tuple) -> tuple:
     # grab tile coordinates and find the relative chunk pos
-    tile_coords = self.get_tile_coords(x, y)
+    tile_coords = x, y
     rel_coords = self.get_rel_tile_coords(*tile_coords)
 
     # find chunk and pack tile data
     chunk_x, chunk_y = self.get_chunk_coords(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
-    sheet_id = self.get_sheet_id(sheetname)
+    sheet_id = self.get_sheet_id(sheet_name)
     tile_data = *rel_coords, sheet_id, sheet_coords
 
     # case: chunk doesn't already exist
@@ -156,6 +159,8 @@ class Chunks:
     if layer not in self.chunks[tag]['tiles']:
       self.add_tile_layer(tag, layer)
       self.chunks[tag]['tiles'][layer] = [tile_data]
+      if tag not in self.re_render:
+        self.re_render.append(tag)
 
     # case: chunk and layer exist
     elif not self.check_duplicate_tile(tag, layer, tile_data):
@@ -173,6 +178,8 @@ class Chunks:
         insert_idx += 1
 
       tile_layer.insert(insert_idx, tile_data)
+      if tag not in self.re_render:
+        self.re_render.append(tag)
 
     return tile_coords
 
@@ -184,13 +191,13 @@ class Chunks:
     if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
       return
 
-    tile_coords = self.get_tile_coords(x, y)
-    rel_coords = self.get_rel_tile_coords(*tile_coords)
+    rel_coords = self.get_rel_tile_coords(x, y)
     r_tile_coords = None
     for i, tile_data in enumerate(self.chunks[tag]['tiles'][layer]):
       if tile_data[0:2] == rel_coords:
         r_tile_coords = rel_coords
         self.chunks[tag]['tiles'][layer].pop(i)
+        self.re_render.append(tag)
         break
 
     return r_tile_coords
@@ -202,48 +209,15 @@ class Chunks:
   def remove_decor(self):
     return
 
-  # returns a dict fill of rendered surfaces of each chunk
-  def render_chunks(self, chunks : list, sheets : dict) -> dict:
-    
-    render_dict = {
-
-    }
-
-    for chunk_tag in chunks:
-      
-      layers = {
-
-      }
-
-      for layer in self.chunks[chunk_tag]['tiles']:
-
-        layer_surf = Surface((self.CHUNK_PX, self.CHUNK_PX))
-        layer_surf.set_colorkey((0, 0, 0))
-
-        for tile_data in self.chunks[chunk_tag]['tiles'][layer]:
-
-          x, y, sheet_id, sheet_coords = tile_data
-          x = x * self.TILE_SIZE + self.SURF_PADDING
-          y = y * self.TILE_SIZE + self.SURF_PADDING
-          sheet_name = self.sheet_refs[sheet_id]
-          tile_surf = sheets[sheet_name][sheet_coords[0]][sheet_coords[1]]
-
-          layer_surf.blit(tile_surf, (x, y))
-        
-        layers[layer] = layer_surf
-
-      render_dict[chunk_tag] = layers
-
-    return render_dict
-
   # return a list of chunks from chunk list that are within a specified rect
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:
     chunks = []
 
     left, right, top, bot = self.get_bounds(rect)
-    
-    for i in range(left, right):
-      for j in range(top, bot):
+    left, top = self.get_chunk_coords(left, top)
+    right, bot = self.get_chunk_coords(right, bot)
+    for i in range(left - 1, right + 1):
+      for j in range(top - 1, bot + 1):
 
         tag = self.get_chunk_tag(i, j)
 
@@ -258,10 +232,6 @@ class Chunks:
   def get_bounds(self, rect : list) -> list:
     left, top = self.get_tile_coords(rect[0], rect[1])
     right, bot = self.get_tile_coords(rect[0] + rect[2], rect[1] + rect[3])
-    left -= self.CHUNK_SIZE
-    top -= self.CHUNK_SIZE
-    right += 1
-    bot += 1
     return int(left), int(right), int(top), int(bot)
 
   # prunes the current chunks, removes all empty layers and empty chunks
@@ -291,67 +261,6 @@ class Chunks:
       # post check if chunk is empty
       if not chunk['tiles'] and not chunk['decor']:
         del self.chunks[chunk_tag]
-
-  # flood files an area with tiles
-  def flood(self, pos : tuple, layer : str, sheet_data : tuple, 
-                                                  rect : list) -> list:
-    tile_x, tile_y = self.get_tile_coords(*pos)
-    chunk_x, chunk_y = self.get_chunk_coords(tile_x, tile_y)
-    tag = self.get_chunk_tag(chunk_x, chunk_y)
-
-    rel_coords = self.get_rel_tile_coords
-
-    if tag in self.chunks and layer in self.chunks[tag]['tiles']:
-      for tile_data in self.chunks[tag]['tiles'][layer]:
-        if tile_data[0:2] == list(rel_coords):
-          return [], []
-
-    left, right, top, bot = self.get_bounds(rect)
-
-    if not (left <= tile_x <= right) or not (top <= tile_y <= bot):
-      return
-
-    open_l = [(tile_x, tile_y)]
-    closed_l = []
-    new_tiles = []
-    
-    for tile_data in self.chunks[tag]['tiles'][layer]:
-      closed_l.append(tile_data[0:2])
-
-    for tag in self.get_chunks(rect):
-      if layer not in self.chunks[tag]:
-        continue
-
-      for rel_tile_data in self.chunks[tag]['tiles'][layer]:
-        chunk_x, chunk_y = self.deformat_chunk_tag(tag)
-        rel_tile_x, rel_tile_y = rel_tile_data[0:2]
-
-        closed_l.append((rel_tile_x + chunk_x * self.CHUNK_SIZE, 
-                          rel_tile_y + chunk_y * self.CHUNK_SIZE))
-
-
-    if (tile_x, tile_y) not in closed_l:
-      new_tiles.append((tile_x, tile_y))
-
-    while len(open_l) > 0:
-      curr_x, curr_y = open_l.pop(0)
-
-      for nx, ny in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-        n_pos = curr_x + nx, curr_y + ny
-        
-        if n_pos in closed_l or not is_inbounds(n_pos, left, right, top, bot):
-          continue
-
-        if n_pos not in open_l:
-          open_l.append(n_pos)
-
-        if n_pos not in new_tiles:
-          new_tiles.append(n_pos)
-
-      closed_l.append((curr_x, curr_y))
-
-    for new_x, new_y in new_tiles:
-      self.add_tile(new_x, new_y, layer, *sheet_data)
 
   # remove stuff within a specified rect
   def cull(self, e_type : str, layer : str, rect : list) -> list:
@@ -389,11 +298,10 @@ class Chunks:
     else:
       left, right, top, bot = self.get_bounds(rect)
 
-
     chunks = self.get_chunks(rect, skip_empty=True)
     tiles = []
     for chunk_tag in chunks:
-      if layer not in self.chunks[chunk_tag]:
+      if layer not in self.chunks[chunk_tag]['tiles']:
         continue
 
       chunk_x, chunk_y = self.deformat_chunk_tag(chunk_tag)

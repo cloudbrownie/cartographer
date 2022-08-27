@@ -1,12 +1,13 @@
 # main script simply brings everything together
 from mods.glob import Glob
 
-glob = Glob(1000, 700)
+if __name__ == '__main__':
+  glob = Glob(1000, 700)
 
-# window loop
-while 1:
+  # window loop
+  while 1:
 
-  glob.window.render()
-  glob.input.handle()
-  glob.clock.tick()
-  glob.update()
+    glob.window.render()
+    glob.input.handle()
+    glob.clock.tick()
+    glob.update()

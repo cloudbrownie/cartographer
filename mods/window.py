@@ -1,4 +1,3 @@
-from tkinter import Y
 import pygame
 
 from pygame.draw import *
@@ -42,9 +41,7 @@ class Window:
     self.sel_tex = None
     self.curr_tex_data = None
 
-    self.render_cache = {
-
-    }
+    self.render_cache = {}
 
   # called each frame to render stuff to the window
   def render(self) -> None:
@@ -76,34 +73,70 @@ class Window:
     # draw all chunks to the camera
     cam_rect = *scroll, *self.glob.curr_cam_size
 
-    chunk_tags = self.glob.chunks.get_chunks(cam_rect, skip_empty=True)
-
-    sheets = self.glob.sheets.sheets
-    render_dict = self.glob.chunks.render_chunks(chunk_tags, sheets)
+    chunks = self.glob.chunks
     chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
+    padded_chunk_size = self.glob.chunks.CHUNK_PX
     pad_offset = self.glob.chunks.SURF_PADDING
+    t_size = self.glob.chunks.TILE_SIZE
+    sheets = self.glob.sheets.sheets
 
-    for chunk in render_dict:
+    needed_chunks = []
+    vis_chunks = chunks.get_chunks(cam_rect)
+    for chunk_tag in vis_chunks:
+      if chunk_tag not in self.render_cache:
+        needed_chunks.append(chunk_tag)
 
-      chunk_x, chunk_y = self.glob.chunks.deformat_chunk_tag(chunk)
+    for i, chunk_tag in enumerate(chunks.re_render):
+      if chunk_tag in vis_chunks:
+        needed_chunks.append(chunk_tag)
+        chunks.re_render.pop(i)
+
+    for chunk_tag in needed_chunks:
+      layers = {}
+      for layer in chunks.chunks[chunk_tag]['tiles']:
+        
+        layer_surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
+        layer_surf.set_colorkey((0, 0, 0))
+
+        for tile_data in chunks.chunks[chunk_tag]['tiles'][layer]:
+
+          x, y, sheet_id, sheet_coords = tile_data
+          x = x * t_size + pad_offset
+          y = y * t_size + pad_offset
+          sheet_name = chunks.sheet_refs[sheet_id]
+          tile_surf = sheets[sheet_name][sheet_coords[0]][sheet_coords[1]]
+
+          layer_surf.blit(tile_surf, (x, y))
+        
+        layers[layer] = layer_surf
+
+      self.render_cache[chunk_tag] = layers
+
+    for chunk in self.render_cache:
+
+      chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk)
       x = chunk_x * chunk_size - scroll[0] - pad_offset
       y = chunk_y * chunk_size - scroll[1] - pad_offset
 
-      for layer in render_dict[chunk]:
+      for layer in self.render_cache[chunk]:
 
-        surf = render_dict[chunk][layer]
+        surf = self.render_cache[chunk][layer]
         self.camera.blit(surf, (x, y))
-
-      padded_s = self.glob.chunks.CHUNK_PX
-      pygame.draw.rect(self.camera, accent_c, (x, y, padded_s, padded_s), 1)
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
       hover_surf = self.sel_tex.copy()
       hover_surf.set_alpha(120)
+      t_size = self.glob.chunks.TILE_SIZE
 
-      self.camera.blit(hover_surf, (px - scroll[0], py - scroll[1]))
+      self.camera.blit(hover_surf, (px * t_size - scroll[0], py * t_size - scroll[1]))
 
+    # draw the selection rect
+    if self.glob.input.sel_rect:
+      rect = list(self.glob.input.selection_rect)
+      rect[0] -= scroll[0]
+      rect[1] -= scroll[1]
+      pygame.draw.rect(self.camera, accent_c, rect, 3)
 
     self.window.blit(scale(self.camera, cam_size), (self.glob.tbar_width, 0))
 
@@ -112,10 +145,13 @@ class Window:
 
     # render info
     info = f'''
+    {self.glob.clock.fps}
     {self.sel_sheet}
     {px}, {py}
     {scroll[0] : .1f}, {scroll[1] : .1f}
+    {zoom}
     {tool}
+    {self.glob.input.sel_rect}
     '''
 
     info_loc = self.glob.tbar_width, 0
