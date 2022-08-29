@@ -97,11 +97,11 @@ class Chunks:
 
   # converts glob pos to chunk coord
   def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
-    return x // self.CHUNK_SIZE, y // self.CHUNK_SIZE
+    return int(x // self.CHUNK_SIZE), int(y // self.CHUNK_SIZE)
 
   # converts glob pos to tile coord 
   def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
-    return x // self.TILE_SIZE, y // self.TILE_SIZE
+    return int(x // self.TILE_SIZE), int(y // self.TILE_SIZE)
 
   # converts tile coord to chunk rel tile coords
   def get_rel_tile_coords(self, x : float, y : float) -> tuple[float, float]:
@@ -111,7 +111,7 @@ class Chunks:
       x = self.CHUNK_SIZE + x
     if y < 0:
       y = self.CHUNK_SIZE + y
-    return x, y
+    return int(x), int(y)
 
   # formats x and y coords into a chunk tag
   def get_chunk_tag(self, x : float, y : float) -> str:
@@ -269,9 +269,7 @@ class Chunks:
 
   # returns a list of connected tiles on point
   def mask_select(self, x : float, y : float, layer : str, rect : list) -> list:
-    tile_x, tile_y = self.get_tile_coords(x, y)
-    
-    open_l = [(tile_x, tile_y)]
+    open_l = [(int(x), int(y))]
     closed_l = []
 
     if not rect:
@@ -309,7 +307,8 @@ class Chunks:
         if n_pos not in open_l and n_pos in tiles:
           open_l.append(n_pos)
 
-      closed_l.append((curr_x, curr_y))
+      if (curr_x, curr_y) in tiles:
+        closed_l.append((curr_x, curr_y))
 
     return closed_l
 

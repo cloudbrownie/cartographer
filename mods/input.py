@@ -108,7 +108,8 @@ class Input:
     self.mouse_pos = mx, my
 
     keys = pygame.key.get_pressed()
-    ctrl = keys[K_LCTRL]
+    ctrl = keys[K_LCTRL] or keys[K_RCTRL]
+    shift = keys[K_LSHIFT] or keys[K_RSHIFT]
 
     # handle each event
     for event in pygame.event.get():
@@ -156,6 +157,7 @@ class Input:
           sheet_name = self.glob.window.sel_sheet
           sheet_coords = self.glob.window.curr_tex_data
           self.glob.start_flood(pos, str_layer, rect, sheet_name, sheet_coords)
+          self.selected_tiles.clear()
 
         elif event.key == K_d and self.entity_type == 'tiles':
 
@@ -164,6 +166,7 @@ class Input:
           else:
             rect = self.glob.window.camera_rect
           self.glob.start_cull(self.entity_type, str(self.layer), rect)
+          self.selected_tiles.clear()
         
         elif event.key == K_h:
           
@@ -193,15 +196,15 @@ class Input:
             if self.tool == 'select':
               self.sel_rect = [self.pen_pos]
 
-            elif ctrl:
+            elif ctrl and shift and self.entity_type == 'tiles':
               px, py = self.pen_pos
               str_layer = str(self.layer)
               rect = self.glob.window.camera_rect
               self.selected_tiles = self.glob.chunks.mask_select(px, py, 
                                                                 str_layer, rect)
-
             else:
               self.holding = True
+              self.selected_tiles.clear()
 
         elif event.button == 3:
 

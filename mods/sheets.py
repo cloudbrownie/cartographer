@@ -1,4 +1,5 @@
 import pygame, os
+import json
 
 from pygame import Surface
 
@@ -18,11 +19,12 @@ class Sheets:
     }
 
     # grab all .png files in the input dir
-    files = [f for f in os.listdir('input/') if f.endswith('.png')]
+    sheet_files = [f[:-4] for f in os.listdir('input/') if f.endswith('.png')]
+    config_files = [f[:-4] for f in os.listdir('input/') if f.endswith('.json')]
 
     # grab each texture from each sheet and store the coords in a dict
-    for f in files:
-      sheet_surf = pygame.image.load(f'input/{f}')
+    for f in sheet_files:
+      sheet_surf = pygame.image.load(f'input/{f}.png')
       sheet_surf.set_colorkey(TRANSPARENT_COLOR)
       textures = []
 
@@ -51,6 +53,12 @@ class Sheets:
           textures.append(row)
         
         self.sheets[f] = textures
+
+      # try to find configuration files
+      if f in config_files:
+        with open(f'{f}.json') as file_data:
+          self.sheet_configs[f] = json.load(file_data)
+
 
   # returns a lsit of all stored sheets
   @property

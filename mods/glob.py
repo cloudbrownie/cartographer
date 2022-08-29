@@ -5,13 +5,10 @@ from mods.input import Input
 from mods.clock import Clock
 from mods.font import Font
 
-import os, sys
-
 from multiprocessing import Process, Queue
 from time import time
-from random import randint
 
-from time import time, time_ns
+from time import time
 
 from mods.chunks import is_inbounds
 
@@ -228,10 +225,7 @@ class Glob:
       process, queue, layer, sheet_name, sheet_coords = process_data
 
       while not queue.empty():
-        try:
-          queue_item = queue.get_nowait()
-        except:
-          break
+        queue_item = queue.get_nowait()
         if queue_item == DONE:      
           self.chunk_processes['flood'].pop(i)
           process.terminate()

@@ -43,6 +43,49 @@ class Window:
 
     self.render_cache = {}
 
+    self.sel_mask = None
+    self.sel_mask_coords = 0, 0
+
+  # generates a mask of a set of tiles and stores internally
+  def generate_mask(self, tiles : list, t_size : float) -> None:
+    tiles = list(self.glob.input.selected_tiles)
+    for i in range(len(tiles)):
+      tiles[i] = tiles[i][0] * t_size, tiles[i][1] * t_size
+
+    left = tiles[0][0]
+    top = tiles[0][1]
+    right = tiles[0][0]
+    bot = tiles[0][1]
+
+    for tile in tiles:
+      if tile[0] < left:
+        left = tile[0]
+      elif tile[0] > right:
+        right = tile[0]
+      elif tile[1] < top:
+        top = tile[1]
+      elif tile[1] > bot:
+        bot = tile[1]
+
+    w = right - left + t_size
+    h = bot - top + t_size
+
+    mask_surf = pygame.Surface((w, h))
+    mask_surf.set_colorkey((0, 0, 0))
+    for tile_data in tiles:
+
+      x, y = tile_data
+      x -= left
+      y -= top
+      pygame.draw.rect(mask_surf, (255, 255, 255), (x, y, t_size, t_size))
+
+    mask = pygame.mask.from_surface(mask_surf)
+    washed_surf = mask.to_surface()
+    washed_surf.set_colorkey((0, 0, 0))
+
+    self.sel_mask = washed_surf
+    self.sel_mask_coords = left, top
+
   # called each frame to render stuff to the window
   def render(self) -> None:
 
@@ -54,6 +97,15 @@ class Window:
     a_comp_c = self.glob.COLORS['a_comp']
     px, py = self.glob.input.pen_pos
     tool = self.glob.input.tool
+    cam_rect = *scroll, *self.glob.curr_cam_size
+
+    chunks = self.glob.chunks
+    chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
+    padded_chunk_size = self.glob.chunks.CHUNK_PX
+    pad_offset = self.glob.chunks.SURF_PADDING
+    t_size = self.glob.chunks.TILE_SIZE
+    sheets = self.glob.sheets.sheets
+
 
     self.window.fill(main_c)
 
@@ -70,16 +122,19 @@ class Window:
 
     cam_size = self.glob.cam_scale_size
 
+    # draw outline for selected tiles
+    if self.glob.input.selected_tiles:
+      if not self.sel_mask:
+        self.generate_mask(self.glob.input.selected_tiles, t_size)
+      
+      for nx, ny in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), 
+                                                            (-1, 1), (-1, -1)]:
+        blit_x = self.sel_mask_coords[0] + nx * 3 - scroll[0]
+        blit_y = self.sel_mask_coords[1] + ny * 3 - scroll[1]
+
+        self.camera.blit(self.sel_mask, (blit_x, blit_y))
+
     # draw all chunks to the camera
-    cam_rect = *scroll, *self.glob.curr_cam_size
-
-    chunks = self.glob.chunks
-    chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
-    padded_chunk_size = self.glob.chunks.CHUNK_PX
-    pad_offset = self.glob.chunks.SURF_PADDING
-    t_size = self.glob.chunks.TILE_SIZE
-    sheets = self.glob.sheets.sheets
-
     needed_chunks = []
     vis_chunks = chunks.get_chunks(cam_rect)
     for chunk_tag in list(self.render_cache.keys()):
@@ -134,7 +189,9 @@ class Window:
       hover_surf.set_alpha(120)
       t_size = self.glob.chunks.TILE_SIZE
 
-      self.camera.blit(hover_surf, (px * t_size - scroll[0], py * t_size - scroll[1]))
+      tx = px * t_size - scroll[0]
+      ty = py * t_size - scroll[1]
+      self.camera.blit(hover_surf, (tx, ty))
 
     # draw the selection rect
     if self.glob.input.sel_rect:
