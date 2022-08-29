@@ -1,5 +1,6 @@
 # tile data format : rel_x, rel_y, sheet_id, sheet_coords
 from pygame import Surface
+from time import time
 
 # returns if a value is in bounds
 def is_inbounds(p : tuple, l : float, r : float, t : float, b : float) -> bool:
@@ -161,25 +162,28 @@ class Chunks:
       self.chunks[tag]['tiles'][layer] = [tile_data]
       if tag not in self.re_render:
         self.re_render.append(tag)
+      return tile_coords
 
     # case: chunk and layer exist
-    elif not self.check_duplicate_tile(tag, layer, tile_data):
-      insert_idx = 0
-      tile_layer = self.chunks[tag]['tiles'][layer]
-      for i, o_tile_data in enumerate(tile_layer):
-        if tile_data[1] < o_tile_data[1]:
-          break
+    insert_idx = 0
+    tile_layer = self.chunks[tag]['tiles'][layer]
+    for i, o_tile_data in enumerate(tile_layer):
+      if tile_data[1] < o_tile_data[1]:
+        break
 
-        # this case actually replaces the current tile and break from the loop
-        elif tile_data[0:2] == o_tile_data[0:2]:
-          tile_layer[i] = tile_data
+      # this case actually replaces the current tile and break from the loop
+      elif tile_data[0:2] == o_tile_data[0:2]:
+        if tile_data == o_tile_data:
           return tile_coords
 
-        insert_idx += 1
+        tile_layer[i] = tile_data
+        return tile_coords
 
-      tile_layer.insert(insert_idx, tile_data)
-      if tag not in self.re_render:
-        self.re_render.append(tag)
+      insert_idx += 1
+
+    tile_layer.insert(insert_idx, tile_data)
+    if tag not in self.re_render:
+      self.re_render.append(tag)
 
     return tile_coords
 
@@ -197,7 +201,8 @@ class Chunks:
       if tile_data[0:2] == rel_coords:
         r_tile_coords = rel_coords
         self.chunks[tag]['tiles'][layer].pop(i)
-        self.re_render.append(tag)
+        if tag not in self.re_render:
+          self.re_render.append(tag)
         break
 
     return r_tile_coords
@@ -261,29 +266,6 @@ class Chunks:
       # post check if chunk is empty
       if not chunk['tiles'] and not chunk['decor']:
         del self.chunks[chunk_tag]
-
-  # remove stuff within a specified rect
-  def cull(self, e_type : str, layer : str, rect : list) -> list:
-    bound_chunks = self.get_chunks(rect, skip_empty=True)
-
-    if e_type == 'tiles':
-
-      cull_tiles = []
-      
-      left, right, top, bot = self.get_bounds(rect)
-      for tag in bound_chunks:
-        if layer not in self.chunks[tag]['tiles']:
-          continue
-
-        cx, cy = self.deformat_chunk_tag(tag)
-        for tile_data in self.chunks[tag]['tiles'][layer]:
-          rel_x, rel_y = tile_data[0:2]
-
-          glob_x = rel_x + cx * self.CHUNK_SIZE
-          glob_y = rel_y + cy * self.CHUNK_SIZE
-
-          if left <= glob_x <= right and top <= glob_y <= bot:
-            cull_tiles.append((glob_x, glob_y))
 
   # returns a list of connected tiles on point
   def mask_select(self, x : float, y : float, layer : str, rect : list) -> list:

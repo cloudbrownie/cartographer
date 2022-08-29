@@ -164,6 +164,11 @@ class Input:
           else:
             rect = self.glob.window.camera_rect
           self.glob.start_cull(self.entity_type, str(self.layer), rect)
+        
+        elif event.key == K_h:
+          
+          w, h = self.glob.curr_cam_size
+          self.glob.scroll_t = [-w / 2, -h / 2]
 
       elif event.type == KEYUP:
 

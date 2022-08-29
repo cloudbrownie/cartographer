@@ -11,6 +11,8 @@ from multiprocessing import Process, Queue
 from time import time
 from random import randint
 
+from time import time, time_ns
+
 from mods.chunks import is_inbounds
 
 def hex_to_rgb(hex_code : str) -> tuple:
@@ -67,8 +69,6 @@ def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue,
     return
 
   q.put((tile_x, tile_y))
-  count = 0
-
   while len(open_l) > 0:
     curr_x, curr_y = open_l.pop(0)
 
@@ -79,11 +79,10 @@ def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue,
         continue
 
       if n_pos not in open_l:
-        open_l.insert(count, n_pos)
+        open_l.append(n_pos)
 
     closed_l.append((curr_x, curr_y))
-    q.put((curr_x, curr_y))
-    count = (count + 1) % 3
+    q.put_nowait((curr_x, curr_y))
 
   q.put(DONE)
 
@@ -91,7 +90,6 @@ def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue,
 def cull(e_type : str, layer : str, chunks : Chunks, q : Queue,
                                                            rect : list) -> None:
   bound_chunks = chunks.get_chunks(rect, skip_empty=True)
-  n = 0
 
   if e_type == 'tiles':
 
@@ -109,7 +107,6 @@ def cull(e_type : str, layer : str, chunks : Chunks, q : Queue,
 
         if left <= glob_x <= right and top <= glob_y <= bot:
           q.put((glob_x, glob_y))
-          n += 1
 
   q.put(DONE)
 
@@ -135,7 +132,7 @@ class Glob:
     self.scroll_t = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.scroll = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.SCROLL_TOL = 0.01
-    self.ZOOM_TOL = 0.001
+    self.ZOOM_TOL = 0.05
     self.cam_speed = 10
 
     self.chunks = Chunks()
@@ -230,9 +227,11 @@ class Glob:
       
       process, queue, layer, sheet_name, sheet_coords = process_data
 
-      n_items = queue.qsize()
-      for _ in range(min(n_items, 10)):
-        queue_item = queue.get()
+      while not queue.empty():
+        try:
+          queue_item = queue.get_nowait()
+        except:
+          break
         if queue_item == DONE:      
           self.chunk_processes['flood'].pop(i)
           process.terminate()
@@ -248,7 +247,7 @@ class Glob:
       process, queue, layer = process_data
 
       n_items = queue.qsize()
-      for _ in range(min(n_items, 10)):
+      for _ in range(min(n_items, 2560)):
         queue_item = queue.get()
         if queue_item == DONE:
           self.chunk_processes['cull'].pop(i)

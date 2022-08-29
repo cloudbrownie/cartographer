@@ -82,6 +82,10 @@ class Window:
 
     needed_chunks = []
     vis_chunks = chunks.get_chunks(cam_rect)
+    for chunk_tag in list(self.render_cache.keys()):
+      if chunk_tag not in vis_chunks:
+        del self.render_cache[chunk_tag]
+
     for chunk_tag in vis_chunks:
       if chunk_tag not in self.render_cache:
         needed_chunks.append(chunk_tag)
@@ -93,6 +97,7 @@ class Window:
 
     for chunk_tag in needed_chunks:
       layers = {}
+
       for layer in chunks.chunks[chunk_tag]['tiles']:
         
         layer_surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
@@ -112,7 +117,7 @@ class Window:
 
       self.render_cache[chunk_tag] = layers
 
-    for chunk in self.render_cache:
+    for chunk in vis_chunks:
 
       chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk)
       x = chunk_x * chunk_size - scroll[0] - pad_offset
@@ -152,6 +157,7 @@ class Window:
     {zoom}
     {tool}
     {self.glob.input.sel_rect}
+    {self.glob.curr_cam_size}
     '''
 
     info_loc = self.glob.tbar_width, 0
