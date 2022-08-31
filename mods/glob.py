@@ -233,15 +233,13 @@ class Glob:
 
     # update the scroll value
     if self.scroll[0] != self.scroll_t[0]:
-      d_scroll = (self.scroll_t[0] - self.scroll[0]) / 5
-      d_scroll = min(d_scroll, d_scroll * self.clock.dt)
+      d_scroll = (self.scroll_t[0] - self.scroll[0]) / 5 * self.clock.dt
       self.scroll[0] += d_scroll
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[0] = self.scroll_t[0]
 
     if self.scroll[1] != self.scroll_t[1]:
-      d_scroll = (self.scroll_t[1] - self.scroll[1]) / 5
-      d_scroll = min(d_scroll, d_scroll * self.clock.dt)
+      d_scroll = (self.scroll_t[1] - self.scroll[1]) / 5 * self.clock.dt
       self.scroll[1] += d_scroll
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[1] = self.scroll_t[1]
