@@ -138,7 +138,7 @@ class Glob:
     self.scroll_t = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.scroll = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.SCROLL_TOL = 0.01
-    self.ZOOM_TOL = 0.1
+    self.ZOOM_TOL = 0.01
     self.cam_speed = 10
 
     self.chunks = Chunks()
