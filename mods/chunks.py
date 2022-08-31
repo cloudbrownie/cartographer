@@ -1,6 +1,7 @@
-# tile data format : rel_x, rel_y, sheet_id, sheet_coords
-from pygame import Surface
-from time import time
+# tile data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col]
+from copy import deepcopy
+from sys import getsizeof
+from pickle import dumps
 
 # returns if a value is in bounds
 def is_inbounds(p : tuple, l : float, r : float, t : float, b : float) -> bool:
@@ -21,7 +22,7 @@ class Chunks:
 
     self.render_cache = {}
 
-    self.re_render = []
+    self.re_render = set()
 
   # adds a chunk to chunk dict
   def add_chunk(self, tag : str) -> None:
@@ -33,6 +34,15 @@ class Chunks:
 
       }
     }
+
+  # copies the entire chunk system and returns as pickled obj (for mem space)
+  def copy(self) -> dict:
+    self.prune()
+
+    chunks_copy = deepcopy(self.chunks)
+    pickle = dumps(chunks_copy)
+
+    return pickle
 
   # removes a chunk from chunk dict
   def remove_chunk(self, tag : str) -> None:
@@ -95,16 +105,23 @@ class Chunks:
 
         offsetx, offsety = 0, 0
 
-  # converts glob pos to chunk coord
-  def get_chunk_coords(self, x : float, y : float) -> tuple[float, float]:
+  # converts glob tile pos to chunk coord
+  def chunk_pos(self, x : float, y : float) -> tuple[int, int]:
     return int(x // self.CHUNK_SIZE), int(y // self.CHUNK_SIZE)
 
-  # converts glob pos to tile coord 
-  def get_tile_coords(self, x : float, y : float) -> tuple[float, float]:
+  # converts glob exact pos to tile coord 
+  def tile_pos(self, x : float, y : float) -> tuple[int, int]:
     return int(x // self.TILE_SIZE), int(y // self.TILE_SIZE)
 
+  # converts the relative tile position to global
+  def glob_tile_pos(self, x : float, y : float, tag : str) -> tuple[int, int]:
+    chunk_x, chunk_y = self.deformat_chunk_tag(tag)
+    tx = x + chunk_x * self.CHUNK_SIZE
+    ty = y + chunk_y * self.CHUNK_SIZE
+    return int(tx), int(ty)
+
   # converts tile coord to chunk rel tile coords
-  def get_rel_tile_coords(self, x : float, y : float) -> tuple[float, float]:
+  def rel_tile_pos(self, x : float, y : float) -> tuple[int, int]:
     x %= self.CHUNK_SIZE
     y %= self.CHUNK_SIZE
     if x < 0:
@@ -122,47 +139,84 @@ class Chunks:
     x, y = tag.split(',')
     return int(x), int(y)
 
-  # get a tile in a layer in a chunk using rel tile coords
-  def get_tile_in_chunk(self, x : float, y : float, layer : str,
-                                                      tag : str) -> tuple:
+  # returns tile data from a layer
+  def get_tile(self, x : float, y : float, layer : str) -> tuple:
+    chunk_x, chunk_y = self.chunk_pos(x, y)
+    tag = self.get_chunk_tag(chunk_x, chunk_y)
+    if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
+      return
+
+    rel_pos = list(self.rel_tile_pos(x, y))
     for tile in self.chunks[tag]['tiles'][layer]:
-      if tile[0:2] == [x, y]:
+      if tile[0:2] == rel_pos:
         return tile
 
-  # check if current tile data exists already
-  def check_duplicate_tile(self, tag : str, layer : str, 
-                                        tile_data : tuple) -> bool:
-    return tile_data in self.chunks[tag]['tiles'][layer]
+  # calculate the bitsum of a tile
+  def calculate_bitsum(self, x : int, y : int, tile_data : list,
+                                                           layer : str) -> None:
+    bitsum = 0
+    neighbor_weight = 1
+    for nx, ny in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
+      curr_pos = x + nx, y + ny
+      chunk_pos = self.chunk_pos(*curr_pos)
+      tag = self.get_chunk_tag(*chunk_pos)
+      if self.get_tile(*curr_pos, layer):
+        bitsum += neighbor_weight
+        self.re_render.add(tag)
+      neighbor_weight *= 2
+    tile_data[3] = bitsum
+    return bitsum
+
+  # calculate the bitsum for a certain tile and fixes the bitsum for neighbors
+  def auto_tile(self, x : int, y : int, layer : str) -> int:
+    bitsum = 0
+    neighbor_weight = 1
+    neighbors = []
+    for nx, ny in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
+      curr_pos = x + nx, y + ny
+      chunk_pos = self.chunk_pos(*curr_pos)
+      tag = self.get_chunk_tag(*chunk_pos)
+      n_tile_data = self.get_tile(*curr_pos, layer)
+      if n_tile_data:
+        bitsum += neighbor_weight
+        neighbors.append((*curr_pos, n_tile_data))
+        self.re_render.add(tag)
+      neighbor_weight *= 2
+
+    for nx, ny, neighbor in neighbors:
+      self.calculate_bitsum(nx, ny, neighbor, layer)
+
+    return bitsum
 
   # adds a tile to a layer in a chunk
   def add_tile(self, x : float, y : float, layer : str, 
-                        sheet_name : str, sheet_coords : tuple) -> tuple:
+    sheet_name : str, sheet_coords : tuple, auto_tile : bool = False) -> tuple:
     # grab tile coordinates and find the relative chunk pos
-    tile_coords = x, y
-    rel_coords = self.get_rel_tile_coords(*tile_coords)
+    rel_pos = self.rel_tile_pos(x, y)
 
     # find chunk and pack tile data
-    chunk_x, chunk_y = self.get_chunk_coords(x, y)
+    chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
     sheet_id = self.get_sheet_id(sheet_name)
-    tile_data = *rel_coords, sheet_id, sheet_coords
+    tile_data = [*rel_pos, sheet_id, *sheet_coords]
 
     # case: chunk doesn't already exist
     if tag not in self.chunks:
       self.add_chunk(tag)
       self.add_tile_layer(tag, layer)
-
       self.chunks[tag]['tiles'][layer] = [tile_data]
-
-      return tile_coords
+      if auto_tile:
+        tile_data[3] = self.auto_tile(x, y, layer)
+      return x, y
 
     # case: chunk exists but layer does not
     if layer not in self.chunks[tag]['tiles']:
       self.add_tile_layer(tag, layer)
       self.chunks[tag]['tiles'][layer] = [tile_data]
-      if tag not in self.re_render:
-        self.re_render.append(tag)
-      return tile_coords
+      if auto_tile:
+        tile_data[3] = self.auto_tile(x, y, layer)
+        self.re_render.add(tag)
+      return x, y
 
     # case: chunk and layer exist
     insert_idx = 0
@@ -174,38 +228,40 @@ class Chunks:
       # this case actually replaces the current tile and break from the loop
       elif tile_data[0:2] == o_tile_data[0:2]:
         if tile_data == o_tile_data:
-          return tile_coords
+          return x, y
 
         tile_layer[i] = tile_data
-        return tile_coords
+        if auto_tile:
+          tile_data[3] = self.auto_tile(x, y, layer)
+        return x, y
 
       insert_idx += 1
 
+    # normal case
     tile_layer.insert(insert_idx, tile_data)
-    if tag not in self.re_render:
-      self.re_render.append(tag)
+    if auto_tile:
+      tile_data[3] = self.auto_tile(x, y, layer)
+    self.re_render.add(tag)
 
-    return tile_coords
+    return x, y
 
   # removes a tile from a layer in a chunk
-  def remove_tile(self, x : float, y : float, layer : str) -> None:
-    chunk_x, chunk_y = self.get_chunk_coords(x, y)
+  def remove_tile(self, x : float, y : float, layer : str, 
+                                              auto_tile : bool = False) -> None:
+    chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
 
     if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
       return
 
-    rel_coords = self.get_rel_tile_coords(x, y)
-    r_tile_coords = None
+    rel_pos = list(self.rel_tile_pos(x, y))
     for i, tile_data in enumerate(self.chunks[tag]['tiles'][layer]):
-      if tile_data[0:2] == rel_coords:
-        r_tile_coords = rel_coords
+      if tile_data[0:2] == rel_pos:
         self.chunks[tag]['tiles'][layer].pop(i)
-        if tag not in self.re_render:
-          self.re_render.append(tag)
-        break
-
-    return r_tile_coords
+        self.re_render.add(tag)
+        if auto_tile:
+          self.auto_tile(x, y, layer)
+        return rel_pos
 
   def add_decor(self):
     return
@@ -219,8 +275,8 @@ class Chunks:
     chunks = []
 
     left, right, top, bot = self.get_bounds(rect)
-    left, top = self.get_chunk_coords(left, top)
-    right, bot = self.get_chunk_coords(right, bot)
+    left, top = self.chunk_pos(left, top)
+    right, bot = self.chunk_pos(right, bot)
     for i in range(left - 1, right + 1):
       for j in range(top - 1, bot + 1):
 
@@ -235,8 +291,8 @@ class Chunks:
 
   # return a bounding rect list
   def get_bounds(self, rect : list) -> list:
-    left, top = self.get_tile_coords(rect[0], rect[1])
-    right, bot = self.get_tile_coords(rect[0] + rect[2], rect[1] + rect[3])
+    left, top = self.tile_pos(rect[0], rect[1])
+    right, bot = self.tile_pos(rect[0] + rect[2], rect[1] + rect[3])
     return int(left), int(right), int(top), int(bot)
 
   # prunes the current chunks, removes all empty layers and empty chunks
@@ -267,7 +323,7 @@ class Chunks:
       if not chunk['tiles'] and not chunk['decor']:
         del self.chunks[chunk_tag]
 
-  # returns a list of connected tiles on point
+  # returns a list of connected tiles on point (glob pos)
   def mask_select(self, x : float, y : float, layer : str, rect : list) -> list:
     open_l = [(int(x), int(y))]
     closed_l = []
@@ -311,6 +367,3 @@ class Chunks:
         closed_l.append((curr_x, curr_y))
 
     return closed_l
-
-  def auto_tile(self, tiles : list, sheet_config : dict) -> None:
-    return

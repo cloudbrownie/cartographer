@@ -3,6 +3,44 @@ import pygame
 from pygame.draw import *
 from pygame.transform import scale
 
+# generates a mask of a set of tiles and stores internally
+def generate_mask(tiles : list, t_size : float) -> None:
+  for i in range(len(tiles)):
+    tiles[i] = tiles[i][0] * t_size, tiles[i][1] * t_size
+
+  left = tiles[0][0]
+  top = tiles[0][1]
+  right = tiles[0][0]
+  bot = tiles[0][1]
+
+  for tile in tiles:
+    if tile[0] < left:
+      left = tile[0]
+    elif tile[0] > right:
+      right = tile[0]
+    elif tile[1] < top:
+      top = tile[1]
+    elif tile[1] > bot:
+      bot = tile[1]
+
+  w = right - left + t_size
+  h = bot - top + t_size
+
+  mask_surf = pygame.Surface((w, h))
+  mask_surf.set_colorkey((0, 0, 0))
+  for tile_data in tiles:
+
+    x, y = tile_data
+    x -= left
+    y -= top
+    pygame.draw.rect(mask_surf, (255, 255, 255), (x, y, t_size, t_size))
+
+  mask = pygame.mask.from_surface(mask_surf)
+  washed_surf = mask.to_surface()
+  washed_surf.set_colorkey((0, 0, 0))
+
+  return washed_surf, left, top
+
 class Window:
   # init
   def __init__(self, glob, width, height, font_size):
@@ -30,12 +68,18 @@ class Window:
 
     n_sheets = len(self.glob.sheets.sheets)
     self.font_size = font_size
-    self.tbar_bounds = (0, self.font_size * n_sheets)
+    self.tbar_bounds = self.font_size * n_sheets
 
     self.hov_sheet = None
     self.sel_sheet = None
     self.curr_sheet = None
+    self.curr_sheet_idx = -1
+
     self.tex_cache = []
+    self.tex_scroll = 0
+    self.tex_scroll_t = 0
+    self.tex_scroll_bound = 0
+    self.TEX_SCROLL_TOL = 0.01
 
     self.hov_tex = None
     self.sel_tex = None
@@ -45,46 +89,6 @@ class Window:
 
     self.sel_mask = None
     self.sel_mask_coords = 0, 0
-
-  # generates a mask of a set of tiles and stores internally
-  def generate_mask(self, tiles : list, t_size : float) -> None:
-    tiles = list(self.glob.input.selected_tiles)
-    for i in range(len(tiles)):
-      tiles[i] = tiles[i][0] * t_size, tiles[i][1] * t_size
-
-    left = tiles[0][0]
-    top = tiles[0][1]
-    right = tiles[0][0]
-    bot = tiles[0][1]
-
-    for tile in tiles:
-      if tile[0] < left:
-        left = tile[0]
-      elif tile[0] > right:
-        right = tile[0]
-      elif tile[1] < top:
-        top = tile[1]
-      elif tile[1] > bot:
-        bot = tile[1]
-
-    w = right - left + t_size
-    h = bot - top + t_size
-
-    mask_surf = pygame.Surface((w, h))
-    mask_surf.set_colorkey((0, 0, 0))
-    for tile_data in tiles:
-
-      x, y = tile_data
-      x -= left
-      y -= top
-      pygame.draw.rect(mask_surf, (255, 255, 255), (x, y, t_size, t_size))
-
-    mask = pygame.mask.from_surface(mask_surf)
-    washed_surf = mask.to_surface()
-    washed_surf.set_colorkey((0, 0, 0))
-
-    self.sel_mask = washed_surf
-    self.sel_mask_coords = left, top
 
   # called each frame to render stuff to the window
   def render(self) -> None:
@@ -104,8 +108,11 @@ class Window:
     padded_chunk_size = self.glob.chunks.CHUNK_PX
     pad_offset = self.glob.chunks.SURF_PADDING
     t_size = self.glob.chunks.TILE_SIZE
-    sheets = self.glob.sheets.sheets
 
+    sheets = self.glob.sheets.sheets
+    sheet_config = self.glob.sheets.sheet_configs
+
+    cam_size = self.glob.cam_scale_size
 
     self.window.fill(main_c)
 
@@ -120,36 +127,44 @@ class Window:
     line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), 
                                     (-scroll[0], ind_len - scroll[1]), ind_w)
 
-    cam_size = self.glob.cam_scale_size
-
     # draw outline for selected tiles
     if self.glob.input.selected_tiles:
       if not self.sel_mask:
-        self.generate_mask(self.glob.input.selected_tiles, t_size)
-      
+        # generate a mask for the selected tiles
+        surf, x, y = generate_mask(list(self.glob.input.selected_tiles), t_size)
+        self.sel_mask = surf
+        self.sel_mask_coords = x, y
+
+      # blit with offsets in 8 directions      
       for nx, ny in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), 
                                                             (-1, 1), (-1, -1)]:
         blit_x = self.sel_mask_coords[0] + nx * 3 - scroll[0]
         blit_y = self.sel_mask_coords[1] + ny * 3 - scroll[1]
-
         self.camera.blit(self.sel_mask, (blit_x, blit_y))
+    elif not self.glob.input.selected_tiles and self.sel_mask:
+      self.sel_mask = None
 
     # draw all chunks to the camera
     needed_chunks = []
     vis_chunks = chunks.get_chunks(cam_rect)
+
+    # remove non visible chunks from list of chunks to be rendered
     for chunk_tag in list(self.render_cache.keys()):
       if chunk_tag not in vis_chunks:
         del self.render_cache[chunk_tag]
 
+    # add visible but not cached chunks
     for chunk_tag in vis_chunks:
       if chunk_tag not in self.render_cache:
         needed_chunks.append(chunk_tag)
 
-    for i, chunk_tag in enumerate(chunks.re_render):
+    # add chunks needed to be rerendered
+    for chunk_tag in list(chunks.re_render):
       if chunk_tag in vis_chunks:
         needed_chunks.append(chunk_tag)
-        chunks.re_render.pop(i)
+        chunks.re_render.remove(chunk_tag)
 
+    # cache chunks
     for chunk_tag in needed_chunks:
       layers = {}
 
@@ -160,11 +175,15 @@ class Window:
 
         for tile_data in chunks.chunks[chunk_tag]['tiles'][layer]:
 
-          x, y, sheet_id, sheet_coords = tile_data
+          x, y, sheet_id, row, col = tile_data
+          sheet_name = chunks.sheet_refs[sheet_id]
           x = x * t_size + pad_offset
           y = y * t_size + pad_offset
-          sheet_name = chunks.sheet_refs[sheet_id]
-          tile_surf = sheets[sheet_name][sheet_coords[0]][sheet_coords[1]]
+          if sheet_name in sheet_config:
+            off_x, off_y = sheet_config[sheet_name][row][col]
+            x += off_x
+            y += off_y
+          tile_surf = sheets[sheet_name][row][col]
 
           layer_surf.blit(tile_surf, (x, y))
         
@@ -172,6 +191,7 @@ class Window:
 
       self.render_cache[chunk_tag] = layers
 
+    # render cached chunks
     for chunk in vis_chunks:
 
       chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk)
@@ -188,9 +208,14 @@ class Window:
       hover_surf = self.sel_tex.copy()
       hover_surf.set_alpha(120)
       t_size = self.glob.chunks.TILE_SIZE
+      row, col = self.curr_tex_data
 
       tx = px * t_size - scroll[0]
       ty = py * t_size - scroll[1]
+      if self.sel_sheet in sheet_config:
+        off_x, off_y = sheet_config[self.sel_sheet][row][col]
+        tx -= off_x
+        ty -= off_y
       self.camera.blit(hover_surf, (tx, ty))
 
     # draw the selection rect
@@ -207,14 +232,11 @@ class Window:
 
     # render info
     info = f'''
-    {self.glob.clock.fps}
-    {self.sel_sheet}
-    {px}, {py}
-    {scroll[0] : .1f}, {scroll[1] : .1f}
-    {zoom}
-    {tool}
-    {self.glob.input.sel_rect}
-    {self.glob.curr_cam_size}
+    fps : {self.glob.clock.avgFPS}
+    current sheet : {self.sel_sheet if self.sel_sheet else ''}
+    pen position : {px}, {py}
+    tool : {tool}
+    auto-tile : {'on' if self.glob.input.auto_tiling else 'off'}
     '''
 
     info_loc = self.glob.tbar_width, 0
@@ -232,31 +254,7 @@ class Window:
     offset = 10
     self.hov_sheet = None
 
-    # sheet name stuff
-    for i, f in enumerate(self.glob.sheets.sheets):
-
-      y_pos = self.font_size * i + offset
-      x_pos = 10
-
-      hover_y = my
-      y_dif = hover_y - y_pos
-
-      if f == self.sel_sheet:
-        self.glob.font.render_txt('-', self.window, (x_pos, y_pos))
-        x_pos = 20
-      elif mx <= self.glob.tbar_width and 0 <= y_dif<= self.font_size:
-        self.glob.font.render_txt('-', self.window, (x_pos, y_pos))
-        x_pos = 20
-        self.hov_sheet = f
-
-      surf = self.glob.font.render_txt(f, self.window, (x_pos, y_pos))
-
-    # divider
-    start_p = self.glob.tbar_width * 0.1, self.div_height
-    end_p = self.glob.tbar_width * 0.9, self.div_height
-    line(self.window, a_comp_c, start_p, end_p, 3)
-
-    # assets
+    # render textures
     self.hov_tex = None
     if self.sel_sheet:
 
@@ -264,7 +262,7 @@ class Window:
       res_y = 10
 
       x = res_x
-      y = res_y + self.div_height * 1.1
+      y = res_y + self.div_height * 1.1 - self.tex_scroll
       for i, row in enumerate(self.tex_cache):
 
         height = 0
@@ -274,7 +272,8 @@ class Window:
 
           rect = pygame.Rect(x, y, w, h)
 
-          if rect.collidepoint(mx, my):
+          # check if cursor is hovering
+          if rect.collidepoint(mx, my) and my > self.div_height:
             self.hov_tex = i, j
 
           if self.hov_tex == (i, j):
@@ -288,19 +287,50 @@ class Window:
         y += height + res_y
         x = res_x
 
+    self.window.fill(accent_c, (0, 0, self.glob.tbar_width, self.div_height))
+
+    # sheet name stuff
+    for i, f in enumerate(self.glob.sheets.sheets):
+
+      y_pos = self.font_size * i + offset
+      x_pos = 10
+
+      hover_y = my
+      y_dif = hover_y - y_pos
+
+      # render sheet names with dashes if needed 
+      if f == self.sel_sheet:
+        self.glob.font.render_txt('-', self.window, (x_pos, y_pos))
+        x_pos = 20
+      elif mx <= self.glob.tbar_width and 0 <= y_dif<= self.font_size:
+        self.glob.font.render_txt('-', self.window, (x_pos, y_pos))
+        x_pos = 20
+        self.hov_sheet = f
+
+      self.glob.font.render_txt(f, self.window, (x_pos, y_pos))
+
+    # divider
+    start_p = self.glob.tbar_width * 0.1, self.div_height
+    end_p = self.glob.tbar_width * 0.9, self.div_height
+    line(self.window, a_comp_c, start_p, end_p, 3)
+
     pygame.display.update()
 
   # sets the current sheet info 
   def set_selected_sheet(self, sheet : str) -> None:
     self.sel_sheet = sheet
     self.curr_sheet = self.glob.sheets.sheets[self.sel_sheet]
+    self.curr_sheet_idx = list(self.glob.sheets.sheets.keys()).index(sheet)
     self.tex_cache.clear()
 
     tex_zoom = self.glob.tex_zoom
-    
+    tot_h = 0
+
     for row in self.curr_sheet:
 
       new_row = []
+
+      max_h = 0
 
       for surf in row:
 
@@ -313,7 +343,13 @@ class Window:
 
         new_row.append(scaled_surf)
 
+        if h > max_h:
+          max_h = h
+
       self.tex_cache.append(new_row)
+      tot_h += max_h + 10
+
+    self.tex_scroll_bound = tot_h - (self.height - self.div_height * 1.1 - 10)
 
   # sets the current texture info
   def set_selected_texture(self, data : tuple) -> None:
@@ -354,3 +390,31 @@ class Window:
     self.glob.scroll[1] += y_scroll_dif
     self.glob.scroll_t[0] += x_scroll_dif
     self.glob.scroll_t[1] += y_scroll_dif
+
+  # cycle through the sheets
+  def cycle_sheets(self, value : int) -> None:
+    self.curr_sheet_idx += value
+    self.curr_sheet_idx %= len(self.glob.sheets.sheets)
+
+    new_sheet = list(self.glob.sheets.sheets.keys())[self.curr_sheet_idx]
+    self.set_selected_sheet(new_sheet)
+
+  # add value to texture scroll
+  def add_texture_scroll(self, value : float) -> None:
+    self.tex_scroll_t -= value * 30
+
+    if self.tex_scroll_t < 0:
+      self.tex_scroll_t = 0
+
+    elif self.tex_scroll_t > self.tex_scroll_bound:
+      self.tex_scroll_t = self.tex_scroll_bound
+
+  # update the texture scroll
+  def update_texture_scroll(self) -> None:
+
+    ds = self.tex_scroll_t - self.tex_scroll
+    ds *= self.glob.clock.dt
+
+    self.tex_scroll += ds
+    if abs(self.tex_scroll - self.tex_scroll_t) <= self.TEX_SCROLL_TOL:
+      self.tex_scroll = self.tex_scroll_t

@@ -7,8 +7,7 @@ from mods.font import Font
 
 from multiprocessing import Process, Queue
 from time import time
-
-from time import time
+from pickle import loads
 
 from mods.chunks import is_inbounds
 
@@ -25,12 +24,12 @@ DONE = 1
 
 # flooding function
 def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, 
-                                                          rect : list) -> None:
+                                                           rect : list) -> None:
   tile_x, tile_y = pos
-  chunk_x, chunk_y = chunks.get_chunk_coords(*pos)
+  chunk_x, chunk_y = chunks.chunk_pos(*pos)
   tag = chunks.get_chunk_tag(chunk_x, chunk_y)
 
-  rel_coords = chunks.get_rel_tile_coords(tile_x, tile_y)
+  rel_coords = chunks.rel_tile_pos(tile_x, tile_y)
 
   if tag in chunks.chunks and layer in chunks.chunks[tag]['tiles']:
     for tile_data in chunks.chunks[tag]['tiles'][layer]:
@@ -107,6 +106,16 @@ def cull(e_type : str, layer : str, chunks : Chunks, q : Queue,
 
   q.put(DONE)
 
+# auto tiling function
+def auto_tile(tiles : list, layer : str, chunks : Chunks, q : Queue) -> None:
+
+  for x, y in tiles:
+    tile = chunks.get_tile(x, y, layer)
+    bitsum = chunks.calculate_bitsum(x, y, tile, layer)
+
+    q.put((x, y, bitsum))
+  
+  q.put(DONE)
 
 class Glob:
   # init
@@ -129,7 +138,7 @@ class Glob:
     self.scroll_t = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.scroll = [-self.curr_cam_size[0] / 2, -self.curr_cam_size[1] / 2]
     self.SCROLL_TOL = 0.01
-    self.ZOOM_TOL = 0.05
+    self.ZOOM_TOL = 0.1
     self.cam_speed = 10
 
     self.chunks = Chunks()
@@ -144,36 +153,58 @@ class Glob:
     self.last_chunk_prune = 0
     self.CHUNK_PRUNE_TIME = 30
 
+    # TODO: share mem between all processes.
+    # these processes end up doing work without acknowledging each other's work 
+    # and end up wasting time.
     self.chunk_processes = {
       'flood':[],
       'cull':[],
       'auto-tile':[]
     }
 
+    self.prev_chunk_states = []
+
   # creates a process for flood filling in the chunk system
   def start_flood(self, pos : tuple, layer : str, rect : list, sheet_name : str,
                                                   sheet_coords : tuple) -> None:
-
     queue = Queue()
 
     process = Process(target=flood, args=(pos, layer, self.chunks, queue, rect))
     process.daemon = True
     process.start()
 
-    process_data = process, queue, layer, sheet_name, sheet_coords
+    process_data = process, queue, layer, sheet_name, sheet_coords, \
+                                                          self.input.auto_tiling
     self.chunk_processes['flood'].append(process_data)
+
+    self.prev_chunk_states.append(self.chunks.copy())
 
   # creates a process for culling tiles in the chunk system
   def start_cull(self, e_type : str, layer : str, rect : list) -> None:
     queue = Queue()
 
-    process = Process(target=cull, args=[e_type, layer, self.chunks, queue, 
-                                                                          rect])
+    process = Process(target=cull, args=(e_type, layer, self.chunks, queue, 
+                                                                          rect))
     process.daemon = True
     process.start()
 
     process_data = process, queue, layer
     self.chunk_processes['cull'].append(process_data)
+
+    self.prev_chunk_states.append(self.chunks.copy())
+
+  # creates a process for auto tiling a list of tiles
+  def start_auto_tile(self, tiles : list, layer : str) -> None:
+    queue = Queue()
+
+    process = Process(target=auto_tile, args=(tiles, layer, self.chunks, queue))
+    process.daemon = True
+    process.start()
+
+    process_data = process, queue, layer
+    self.chunk_processes['auto-tile'].append(process_data)
+
+    self.prev_chunk_states.append(self.chunks.copy())
 
   # update camera zoom value
   def adjust_cam_zoom(self, val : int) -> None:
@@ -186,6 +217,16 @@ class Glob:
   @property
   def tex_zoom(self) -> float:
     return self.zoom_vals[self.tex_zoom_i]
+
+  # reverts to previous chunk state if one exists
+  def undo(self) -> None:
+    if len(self.prev_chunk_states) > 0:
+      pickle = self.prev_chunk_states.pop()
+      unpickled = loads(pickle)
+
+      self.chunks.chunks = unpickled
+
+      self.window.render_cache.clear()
 
   # called each frame to update global stuff
   def update(self) -> None:
@@ -214,6 +255,10 @@ class Glob:
         self.cam_zoom = self.cam_zoom_t
       self.window.update_camera_size()
 
+    # adjust the texture scroll
+    if self.window.tex_scroll != self.window.tex_scroll_t:
+      self.window.update_texture_scroll()
+
     # prune the chunks regularly
     if time() - self.last_chunk_prune >= self.CHUNK_PRUNE_TIME:
       self.chunks.prune()
@@ -222,7 +267,7 @@ class Glob:
     # add tiles from flood processes
     for i, process_data in enumerate(self.chunk_processes['flood']):
       
-      process, queue, layer, sheet_name, sheet_coords = process_data
+      process, queue, layer, sheet_name, sheet_coords, auto_tile = process_data
 
       while not queue.empty():
         queue_item = queue.get_nowait()
@@ -233,7 +278,8 @@ class Glob:
           queue.join_thread()
           break
         else:
-          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords)
+          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords, 
+                                                                      auto_tile)
 
     # remove tiles from cull process
     for i, process_data in enumerate(self.chunk_processes['cull']):
@@ -251,4 +297,26 @@ class Glob:
           break
         else:
           self.chunks.remove_tile(*queue_item, layer)
+
+    # change bitsums from auto tile
+    for i, process_data in enumerate(self.chunk_processes['auto-tile']):
+
+      process, queue, layer = process_data
+
+      while not queue.empty():
+        queue_item = queue.get_nowait()
+        if queue_item == DONE:
+          self.chunk_processes['auto-tile'].pop(i)
+          process.terminate()
+          queue.close()
+          queue.join_thread()
+          self.input.selected_tiles.clear()
+          break
+        else:
+          x, y, bitsum = queue_item
+          tile = self.chunks.get_tile(x, y, layer)
+          tile[3] = bitsum
+          chunk_pos = self.chunks.chunk_pos(x, y)
+          tag = self.chunks.get_chunk_tag(*chunk_pos)
+          self.chunks.re_render.add(tag)
 
