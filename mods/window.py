@@ -234,7 +234,7 @@ class Window:
 
     # render info
     info = f'''
-    fps : {self.glob.clock.avgFPS}
+    fps : {self.glob.clock.fps_info}
     current sheet : {self.sel_sheet if self.sel_sheet else ''}
     pen position : {px}, {py}
     tool : {tool}
