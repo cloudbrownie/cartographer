@@ -88,23 +88,6 @@ class Chunks:
     self.add_sheet_ref(sheet_name)
     return self.sheet_id
 
-  # cache the chunk surfs
-  def cache_chunk_surfs(self, tag : str, sheets : dict) -> None:
-    
-    for tile_layer in self.chunks[tag]['tiles']:
-      tiles = self.chunks[tag]['tiles'][tile_layer]
-      for tile_data in tiles:
-
-        x, y, sheet_id, sheet_coords = tile_data
-        sheet_name = self.sheet_refs[sheet_id]
-
-        surf = sheets.get_surf(sheet_name, sheet_coords)
-
-        x *= self.TILE_SIZE
-        y *= self.TILE_SIZE
-
-        offsetx, offsety = 0, 0
-
   # converts glob tile pos to chunk coord
   def chunk_pos(self, x : float, y : float) -> tuple[int, int]:
     return int(x // self.CHUNK_SIZE), int(y // self.CHUNK_SIZE)
@@ -124,6 +107,7 @@ class Chunks:
   def rel_tile_pos(self, x : float, y : float) -> tuple[int, int]:
     x %= self.CHUNK_SIZE
     y %= self.CHUNK_SIZE
+    # adjust for negative relative values
     if x < 0:
       x = self.CHUNK_SIZE + x
     if y < 0:
@@ -144,7 +128,7 @@ class Chunks:
     chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
     if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
-      return
+      return None
 
     rel_pos = list(self.rel_tile_pos(x, y))
     for tile in self.chunks[tag]['tiles'][layer]:
@@ -152,8 +136,9 @@ class Chunks:
         return tile
 
   # calculate the bitsum of a tile
-  def calculate_bitsum(self, x : int, y : int, tile_data : list,
-                                                           layer : str) -> None:
+  def calculate_bitsum(self, x : int, y : int, tile_data : list, \
+      layer : str) -> int:
+    # find bitsum using bitwise algorithm
     bitsum = 0
     neighbor_weight = 1
     for nx, ny in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
@@ -169,6 +154,7 @@ class Chunks:
 
   # calculate the bitsum for a certain tile and fixes the bitsum for neighbors
   def auto_tile(self, x : int, y : int, layer : str) -> int:
+    # bitwise algorithm and store neighbors along the way
     bitsum = 0
     neighbor_weight = 1
     neighbors = []
@@ -183,6 +169,7 @@ class Chunks:
         self.re_render.add(tag)
       neighbor_weight *= 2
 
+    # fix neighbors
     for nx, ny, neighbor in neighbors:
       self.calculate_bitsum(nx, ny, neighbor, layer)
 
@@ -246,8 +233,8 @@ class Chunks:
     return x, y
 
   # removes a tile from a layer in a chunk
-  def remove_tile(self, x : float, y : float, layer : str, 
-                                              auto_tile : bool = False) -> None:
+  def remove_tile(self, x : float, y : float, layer : str, \
+      auto_tile : bool = False) -> None:
     chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
 
@@ -323,6 +310,7 @@ class Chunks:
       if not chunk['tiles'] and not chunk['decor']:
         del self.chunks[chunk_tag]
 
+  # TODO: make this a process function (too slow for large sections)
   # returns a list of connected tiles on point (glob pos)
   def mask_select(self, x : float, y : float, layer : str, rect : list) -> list:
     open_l = [(int(x), int(y))]

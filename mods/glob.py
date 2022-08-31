@@ -23,8 +23,8 @@ def hex_to_rgb(hex_code : str) -> tuple:
 DONE = 1
 
 # flooding function
-def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, 
-                                                           rect : list) -> None:
+def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, \
+    rect : list) -> None:
   tile_x, tile_y = pos
   chunk_x, chunk_y = chunks.chunk_pos(*pos)
   tag = chunks.get_chunk_tag(chunk_x, chunk_y)
@@ -83,8 +83,8 @@ def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue,
   q.put(DONE)
 
 # culling function
-def cull(e_type : str, layer : str, chunks : Chunks, q : Queue,
-                                                           rect : list) -> None:
+def cull(e_type : str, layer : str, chunks : Chunks, q : Queue, \
+    rect : list) -> None:
   bound_chunks = chunks.get_chunks(rect, skip_empty=True)
 
   if e_type == 'tiles':
@@ -165,8 +165,8 @@ class Glob:
     self.prev_chunk_states = []
 
   # creates a process for flood filling in the chunk system
-  def start_flood(self, pos : tuple, layer : str, rect : list, sheet_name : str,
-                                                  sheet_coords : tuple) -> None:
+  def start_flood(self, pos : tuple, layer : str, rect : list, \
+      sheet_name : str, sheet_coords : tuple) -> None:
     queue = Queue()
 
     process = Process(target=flood, args=(pos, layer, self.chunks, queue, rect))
@@ -174,7 +174,7 @@ class Glob:
     process.start()
 
     process_data = process, queue, layer, sheet_name, sheet_coords, \
-                                                          self.input.auto_tiling
+      self.input.auto_tiling
     self.chunk_processes['flood'].append(process_data)
 
     self.prev_chunk_states.append(self.chunks.copy())
@@ -183,8 +183,8 @@ class Glob:
   def start_cull(self, e_type : str, layer : str, rect : list) -> None:
     queue = Queue()
 
-    process = Process(target=cull, args=(e_type, layer, self.chunks, queue, 
-                                                                          rect))
+    process = Process(target=cull, args=(e_type, layer, self.chunks, queue, \
+      rect))
     process.daemon = True
     process.start()
 
@@ -278,8 +278,8 @@ class Glob:
           queue.join_thread()
           break
         else:
-          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords, 
-                                                                      auto_tile)
+          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords, \
+            auto_tile)
 
     # remove tiles from cull process
     for i, process_data in enumerate(self.chunk_processes['cull']):

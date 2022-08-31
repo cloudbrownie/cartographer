@@ -8,6 +8,7 @@ def generate_mask(tiles : list, t_size : float) -> None:
   for i in range(len(tiles)):
     tiles[i] = tiles[i][0] * t_size, tiles[i][1] * t_size
 
+  # find bounds
   left = tiles[0][0]
   top = tiles[0][1]
   right = tiles[0][0]
@@ -26,6 +27,7 @@ def generate_mask(tiles : list, t_size : float) -> None:
   w = right - left + t_size
   h = bot - top + t_size
 
+  # make mask
   mask_surf = pygame.Surface((w, h))
   mask_surf.set_colorkey((0, 0, 0))
   for tile_data in tiles:
@@ -122,10 +124,10 @@ class Window:
     # origin indicator
     ind_len = 20
     ind_w = 3
-    line(self.camera, accent_c, (-ind_len - scroll[0], -scroll[1]), 
-                                    (ind_len - scroll[0], -scroll[1]), ind_w)
-    line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), 
-                                    (-scroll[0], ind_len - scroll[1]), ind_w)
+    line(self.camera, accent_c, (-ind_len - scroll[0], -scroll[1]), \
+      (ind_len - scroll[0], -scroll[1]), ind_w)
+    line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), \
+      (-scroll[0], ind_len - scroll[1]), ind_w)
 
     # draw outline for selected tiles
     if self.glob.input.selected_tiles:
