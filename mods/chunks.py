@@ -58,7 +58,7 @@ class Chunks:
     sorted_layers = {}
     for layer_key in items:
       sorted_layers[layer_key] = layers[layer_key]
-    layers = sorted_layers
+    self.chunks[tag]['tiles'] = sorted_layers
 
   # removes a tile layer from a chunk
   def remove_tile_layer(self, tag : str, layer : str) -> None:
@@ -69,12 +69,12 @@ class Chunks:
     self.chunks[tag]['decor'][layer] = []
 
     # sort layers
-    layers = self.chunks[tag]['tiles']
+    layers = self.chunks[tag]['decor']
     items = sorted(list(layers.keys()), key=lambda x : int(x))
     sorted_layers = {}
     for layer_key in items:
       sorted_layers[layer_key] = layers[layer_key]
-    layers = sorted_layers
+    self.chunks[tag]['decor'] = sorted_layers
 
   # removes a decor layer from a chunk
   def remove_decor_layer(self, tag : str, layer : str) -> None:
