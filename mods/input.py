@@ -146,7 +146,7 @@ class Input:
         elif event.key in [K_1, K_2, K_3]:
           self.tool_i = event.key - K_1
 
-        elif event.key == K_f and self.entity_type == 'tiles' and \
+        elif event.key == K_f and ctrl and self.entity_type == 'tiles' and \
             self.glob.window.sel_tex:
           if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
             rect = self.selection_rect
@@ -159,7 +159,7 @@ class Input:
           self.glob.start_flood(pos, curr_layer, rect, sheet_name, sheet_coords)
           self.selected_tiles.clear()
 
-        elif event.key == K_d and self.entity_type == 'tiles':
+        elif event.key == K_d and ctrl and self.entity_type == 'tiles':
 
           if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
             rect = self.selection_rect
