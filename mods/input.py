@@ -141,7 +141,7 @@ class Input:
             self.glob.adjust_cam_zoom(vals[event.key])
           
           elif shift:
-            self.layer += vals[event.key]
+            self.layer -= vals[event.key]
 
         elif event.key in [K_1, K_2, K_3]:
           self.tool_i = event.key - K_1
