@@ -92,6 +92,9 @@ class Window:
     self.sel_mask = None
     self.sel_mask_coords = 0, 0
 
+    self.view_modes = ['all', 'focus', 'single']
+    self.view_mode_i = 0
+
   # called each frame to render stuff to the window
   def render(self) -> None:
 
@@ -166,17 +169,28 @@ class Window:
         needed_chunks.append(chunk_tag)
         chunks.re_render.remove(chunk_tag)
 
-    # cache chunks
+    # remove nonvisible chunks from cache
+    for layer in list(self.render_cache.keys()):
+      for chunk_tag in list(self.render_cache[layer]):
+        if chunk_tag not in vis_chunks:
+          del self.render_cache[layer][chunk_tag]
+
+      # remove empty layers
+      if not self.render_cache[layer]:
+        del self.render_cache[layer]
+
+    # iterate through needed chunks and render them to cache
     for chunk_tag in needed_chunks:
-      layers = {}
 
       for layer in chunks.chunks[chunk_tag]['tiles']:
         
-        layer_surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
-        layer_surf.set_colorkey((0, 0, 0))
+        if layer not in self.render_cache:
+          self.render_cache[layer] = {}
+        
+        surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
+        surf.set_colorkey((0, 0, 0))
 
         for tile_data in chunks.chunks[chunk_tag]['tiles'][layer]:
-
           x, y, sheet_id, row, col = tile_data
           sheet_name = chunks.sheet_refs[sheet_id]
           x = x * t_size + pad_offset
@@ -187,22 +201,41 @@ class Window:
             y += off_y
           tile_surf = sheets[sheet_name][row][col]
 
-          layer_surf.blit(tile_surf, (x, y))
+          surf.blit(tile_surf, (x, y))
+
+        self.render_cache[layer][chunk_tag] = surf
+
+    # grab all visible layers based on view mode
+    vis_layers = []
+    curr_input_layer = str(self.glob.input.layer)
+    if self.view_mode_i == 0:
+      vis_layers = list(self.render_cache.keys())
+
+    elif self.view_mode_i == 1:
+      for layer in list(self.render_cache.keys()):
+        if int(layer) > int(curr_input_layer):
+          break
+        vis_layers.append(layer)
+
+    elif self.view_mode_i == 2 and curr_input_layer in self.render_cache:
+      vis_layers.append(curr_input_layer)
+
+    # sort the layers
+    vis_layers = sorted(vis_layers)
+
+    # render the layers
+    for layer in vis_layers:
+      for chunk_tag in self.render_cache[layer]:
+        chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk_tag)
+        x = chunk_x * chunk_size - scroll[0] - pad_offset
+        y = chunk_y * chunk_size - scroll[1] - pad_offset
+
+        surf = self.render_cache[layer][chunk_tag]
         
-        layers[layer] = layer_surf
+        if self.view_mode_i == 1 and layer != curr_input_layer:
+          surf = surf.copy()
+          surf.set_alpha(120)
 
-      self.render_cache[chunk_tag] = layers
-
-    # render cached chunks
-    for chunk in vis_chunks:
-
-      chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk)
-      x = chunk_x * chunk_size - scroll[0] - pad_offset
-      y = chunk_y * chunk_size - scroll[1] - pad_offset
-
-      for layer in self.render_cache[chunk]:
-
-        surf = self.render_cache[chunk][layer]
         self.camera.blit(surf, (x, y))
 
     # draw tile highlight at current pen position
@@ -238,7 +271,9 @@ class Window:
     current sheet : {self.sel_sheet if self.sel_sheet else ''}
     pen position : {px}, {py}
     tool : {tool}
+    layer : {self.glob.input.layer}
     auto-tile : {'on' if self.glob.input.auto_tiling else 'off'}
+    view mode : {self.view_modes[self.view_mode_i]}
     '''
 
     info_loc = self.glob.tbar_width, 0
@@ -420,3 +455,7 @@ class Window:
     self.tex_scroll += ds
     if abs(self.tex_scroll - self.tex_scroll_t) <= self.TEX_SCROLL_TOL:
       self.tex_scroll = self.tex_scroll_t
+
+  # cycle through view modes
+  def cycle_view_mode(self, value : int) -> None:
+    self.view_mode_i = (self.view_mode_i + value) % len(self.view_modes)

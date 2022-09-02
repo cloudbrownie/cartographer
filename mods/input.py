@@ -129,16 +129,19 @@ class Input:
             pygame.quit()
             sys.exit()
 
-        elif event.key in self.arrow_bools.keys() and not ctrl:
+        elif event.key in self.arrow_bools.keys() and not ctrl and not shift:
           self.arrow_bools[event.key] = True
 
-        elif event.key in [K_UP, K_DOWN] and ctrl:
+        elif event.key in [K_UP, K_DOWN]:
           vals = {
             K_UP: -1,
             K_DOWN: 1
           }
-
-          self.glob.adjust_cam_zoom(vals[event.key])
+          if ctrl:
+            self.glob.adjust_cam_zoom(vals[event.key])
+          
+          elif shift:
+            self.layer += vals[event.key]
 
         elif event.key in [K_1, K_2, K_3]:
           self.tool_i = event.key - K_1
@@ -184,6 +187,12 @@ class Input:
 
         elif event.key == K_z and ctrl:
           self.glob.undo()
+
+        elif event.key == K_l:
+          if shift:
+            self.glob.window.cycle_view_mode(-1)
+          else:
+            self.glob.window.cycle_view_mode(1)
 
       elif event.type == KEYUP:
 

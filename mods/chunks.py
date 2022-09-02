@@ -129,7 +129,7 @@ class Chunks:
     x, y = tag.split(',')
     return int(x), int(y)
 
-  # returns tile data from a layer
+  # returns tile data from a layer given glob pos
   def get_tile(self, x : float, y : float, layer : str) -> tuple:
     chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
@@ -137,6 +137,16 @@ class Chunks:
       return None
 
     rel_pos = list(self.rel_tile_pos(x, y))
+    for tile in self.chunks[tag]['tiles'][layer]:
+      if tile[0:2] == rel_pos:
+        return tile
+
+  #returns tile data from a layer given rel pos and chunk
+  def get_rel_tile(self, x : float, y : float, layer : str, tag : str) -> tuple:
+    if tag not in self.chunks or layer not in self.chunks[tag]['tiles']:
+      return None
+
+    rel_pos = [x, y]
     for tile in self.chunks[tag]['tiles'][layer]:
       if tile[0:2] == rel_pos:
         return tile
