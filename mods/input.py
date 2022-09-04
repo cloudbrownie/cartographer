@@ -49,6 +49,8 @@ class Input:
     self.selected_tiles = []
     self.auto_tiling = False
 
+    self.mouse_scroll = False
+
   # returns the pen position relative to camera
   @property
   def pen_pos(self) -> tuple[float, float]:
@@ -227,6 +229,10 @@ class Input:
               self.holding = True
               self.selected_tiles.clear()
 
+        elif event.button == 2:
+          self.mouse_scroll = mx > self.glob.tbar_width
+          pygame.mouse.get_rel()
+
         elif event.button == 3:
 
           if self.glob.window.sel_tex:
@@ -255,10 +261,16 @@ class Input:
               bot = ceil(bot / t_size) * t_size - 1
               self.sel_rect = [(left, top), (right, bot)]
 
+        elif event.button == 2:
+          self.mouse_scroll = False
+
       elif event.type == MOUSEWHEEL:
 
         if mx < self.glob.tbar_width:
           self.glob.window.add_texture_scroll(event.y)
+
+        elif mx > self.glob.tbar_width:
+          self.glob.adjust_cam_zoom(-event.y)
 
 
     # if holding and drawing, add to the chunk's stuff
@@ -275,7 +287,7 @@ class Input:
           sheet_coords = self.glob.window.curr_tex_data
           curr_layer = str(self.layer)
               
-          self.glob.chunks.add_tile(px, py, curr_layer, sheet, sheet_coords, \
+          add_tile = self.glob.chunks.add_tile(px, py, curr_layer, sheet, sheet_coords, \
             self.auto_tiling)
 
           self.last_pos = px, py
@@ -298,3 +310,14 @@ class Input:
         zoom = self.glob.cam_zoom
         self.glob.scroll_t[0] += self.arrow_vals[key][0] * cam_speed * dt * zoom
         self.glob.scroll_t[1] += self.arrow_vals[key][1] * cam_speed * dt * zoom
+
+    # move scroll traget with the mouse if mouse scrolling
+    if self.mouse_scroll:
+      dx, dy = pygame.mouse.get_rel()
+      dx *= self.glob.cam_zoom * self.glob.window.camera_ratio[0]
+      dy *= self.glob.cam_zoom * self.glob.window.camera_ratio[1]
+
+      self.glob.scroll_t[0] -= dx
+      self.glob.scroll_t[1] -= dy
+      self.glob.scroll[0] -= dx
+      self.glob.scroll[1] -= dy
