@@ -1,3 +1,4 @@
+from fileinput import close
 from mods.chunks import Chunks
 from mods.sheets import Sheets
 from mods.window import Window
@@ -23,8 +24,8 @@ def hex_to_rgb(hex_code : str) -> tuple:
 DONE = 1
 
 # flooding function
-def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, \
-    rect : list) -> None:
+def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, rect : list) \
+    -> None:
   tile_x, tile_y = pos
   chunk_x, chunk_y = chunks.chunk_pos(*pos)
   tag = chunks.get_chunk_tag(chunk_x, chunk_y)
@@ -76,15 +77,15 @@ def flood(pos : tuple, layer : str, chunks : Chunks, q : Queue, \
 
       if n_pos not in open_l:
         open_l.append(n_pos)
-
+        
     closed_l.append((curr_x, curr_y))
     q.put_nowait((curr_x, curr_y))
 
   q.put(DONE)
 
 # culling function
-def cull(e_type : str, layer : str, chunks : Chunks, q : Queue, \
-    rect : list) -> None:
+def cull(e_type : str, layer : str, chunks : Chunks, q : Queue, rect : list) \
+    -> None:
   bound_chunks = chunks.get_chunks(rect, skip_empty=True)
 
   if e_type == 'tiles':
@@ -188,7 +189,7 @@ class Glob:
     process.daemon = True
     process.start()
 
-    process_data = process, queue, layer
+    process_data = process, queue, layer, self.input.auto_tiling
     self.chunk_processes['cull'].append(process_data)
 
     self.prev_chunk_states.append(self.chunks.copy())
@@ -275,17 +276,16 @@ class Glob:
           queue.close()
           queue.join_thread()
           break
-        else:
-          self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords, \
-            auto_tile)
+        self.chunks.add_tile(*queue_item, layer, sheet_name, sheet_coords, \
+          auto_tile)
 
     # remove tiles from cull process
     for i, process_data in enumerate(self.chunk_processes['cull']):
       
-      process, queue, layer = process_data
+      process, queue, layer, auto_tile = process_data
 
       n_items = queue.qsize()
-      for _ in range(min(n_items, 2560)):
+      for _ in range(max(n_items, 2560)):
         queue_item = queue.get()
         if queue_item == DONE:
           self.chunk_processes['cull'].pop(i)
@@ -293,8 +293,7 @@ class Glob:
           queue.close()
           queue.join_thread()
           break
-        else:
-          self.chunks.remove_tile(*queue_item, layer)
+        self.chunks.remove_tile(*queue_item, layer, auto_tile)
 
     # change bitsums from auto tile
     for i, process_data in enumerate(self.chunk_processes['auto-tile']):
@@ -310,11 +309,10 @@ class Glob:
           queue.join_thread()
           self.input.selected_tiles.clear()
           break
-        else:
-          x, y, bitsum = queue_item
-          tile = self.chunks.get_tile(x, y, layer)
-          tile[3] = bitsum
-          chunk_pos = self.chunks.chunk_pos(x, y)
-          tag = self.chunks.get_chunk_tag(*chunk_pos)
-          self.chunks.re_render.add(tag)
+        x, y, bitsum = queue_item
+        tile = self.chunks.get_tile(x, y, layer)
+        tile[3] = bitsum
+        chunk_pos = self.chunks.chunk_pos(x, y)
+        tag = self.chunks.get_chunk_tag(*chunk_pos)
+        self.chunks.re_render.add(tag)
 

@@ -1,4 +1,6 @@
 # tile data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col]
+# decor data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col]
+import chunk
 from copy import deepcopy
 from sys import getsizeof
 from pickle import dumps
@@ -94,11 +96,15 @@ class Chunks:
     self.add_sheet_ref(sheet_name)
     return self.sheet_id
 
-  # converts glob tile pos to chunk coord
-  def chunk_pos(self, x : float, y : float) -> tuple[int, int]:
+  # converts glob tile pos to chunk pos
+  def chunk_pos(self, x : float, y : float, tile : bool = True) \
+      -> tuple[int, int]:
+    if not tile:
+      size = self.CHUNK_SIZE * self.TILE_SIZE
+      return int(x // size), int(y // size)
     return int(x // self.CHUNK_SIZE), int(y // self.CHUNK_SIZE)
 
-  # converts glob exact pos to tile coord 
+  # converts glob exact pos to tile pos 
   def tile_pos(self, x : float, y : float) -> tuple[int, int]:
     return int(x // self.TILE_SIZE), int(y // self.TILE_SIZE)
 
@@ -109,7 +115,7 @@ class Chunks:
     ty = y + chunk_y * self.CHUNK_SIZE
     return int(tx), int(ty)
 
-  # converts tile coord to chunk rel tile coords
+  # converts tile pos to chunk rel tile pos
   def rel_tile_pos(self, x : float, y : float) -> tuple[int, int]:
     x %= self.CHUNK_SIZE
     y %= self.CHUNK_SIZE
@@ -120,11 +126,22 @@ class Chunks:
       y = self.CHUNK_SIZE + y
     return int(x), int(y)
 
-  # formats x and y coords into a chunk tag
+  # converts an exact pos to a rel decor pos
+  def rel_decor_pos(self, x : float, y : float) -> tuple[int, int]:
+    # relative decor positions can be negative so that blitting algorithm can
+    # figure out needed neighboring chunks
+
+    size = self.CHUNK_SIZE * self.TILE_SIZE
+    chunk_glob_x = x // size * size
+    chunk_glob_y = y // size * size
+
+    return x - chunk_glob_x, y - chunk_glob_y
+
+  # formats x and y pos into a chunk tag
   def get_chunk_tag(self, x : float, y : float) -> str:
     return f'{int(x)},{int(y)}'
 
-  # returns x and y coords from formatted chunk tag
+  # returns x and y pos from formatted chunk tag
   def deformat_chunk_tag(self, tag : str) -> tuple[int, int]:
     x, y = tag.split(',')
     return int(x), int(y)
@@ -213,7 +230,7 @@ class Chunks:
       return x, y
 
     # case: chunk exists but layer does not
-    if layer not in self.chunks[tag]['tiles']:
+    elif layer not in self.chunks[tag]['tiles']:
       self.add_tile_layer(tag, layer)
       self.chunks[tag]['tiles'][layer] = [tile_data]
       if auto_tile:
@@ -266,12 +283,79 @@ class Chunks:
           self.auto_tile(x, y, layer)
         return rel_pos
 
-  def add_decor(self):
-    return
+  # adds a decor piece to the layer in this chunk, also checks for spill over in
+  # neighbor chunks
+  def add_decor(self, x : float, y : float, layer : str, sheet_name : str, \
+      sheet_coords : tuple, size : tuple) -> None:
 
+    chunk_x, chunk_y = self.chunk_pos(x, y, tile=False)
+    tag = self.get_chunk_tag(chunk_x, chunk_y)
+    sheet_id = self.get_sheet_id(sheet_name)
+    rel_pos = self.rel_decor_pos(x, y)
+    decor_data = [*rel_pos, sheet_id, *sheet_coords]
 
+    # case: chunk doesn't exist
+    if tag not in self.chunks:
+      self.add_chunk(tag)
+      self.add_decor_layer(tag, layer)
+
+    # case: chunk exists but layer does not
+    if layer not in self.chunks[tag]['decor']:
+      self.add_decor_layer(tag, layer)
+      self.re_render.add(tag)
+
+    # case: chunk and layer exist
+    self.chunks[tag]['decor'][layer].append(decor_data)
+    self.re_render.add(tag)
+
+    # check for spillover
+    w, h = size
+    bot_right = x + w, y + h
+    diag_chunk_x, diag_chunk_y = self.chunk_pos(*bot_right, tile=False)
+    horiz_chunks = diag_chunk_x - chunk_x
+    vert_chunks = diag_chunk_y - chunk_y
+
+    # find spill chunks
+    spill_chunks = []
+    for i in range(horiz_chunks):
+      spill_chunks.append([i + 1, 0])
+
+    for j in range(vert_chunks):
+      for _, spill_chunk in enumerate(spill_chunks.copy()):
+        spill_chunks.append([spill_chunk[0], j + 1])
+      
+      spill_chunks.append([0, j + 1])
+    
+    # add the decor data to the spill chunks
+    chunk_size = self.CHUNK_SIZE * self.TILE_SIZE
+    for i, j in spill_chunks:
+      n_chunk_x = chunk_x + i
+      n_chunk_y = chunk_y + j
+      spill_tag = self.get_chunk_tag(n_chunk_x, n_chunk_y)
+      spill_decor_data = decor_data.copy()
+      spill_decor_data[0] -= i * chunk_size
+      spill_decor_data[1] -= j * chunk_size
+
+      if spill_tag not in self.chunks:
+        self.add_chunk(spill_tag)
+        self.add_decor_layer(spill_tag, layer)
+        self.chunks[spill_tag]['decor'][layer] = [spill_decor_data]
+        
+      elif layer not in self.chunks[spill_tag]['decor']:
+        self.add_decor_layer(spill_tag, layer)
+        self.chunks[spill_tag]['decor'][layer] = [spill_decor_data]
+        self.re_render.add(tag)
+
+      else:
+        self.chunks[spill_tag]['decor'][layer].append(spill_decor_data)
+        self.re_render.add(tag)
+
+    return x, y
+
+  # removes a decor from a layer in a chunk; also removes decor from 
   def remove_decor(self):
     return
+    
 
   # return a list of chunks from chunk list that are within a specified rect
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:

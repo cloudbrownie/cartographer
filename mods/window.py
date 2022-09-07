@@ -1,3 +1,4 @@
+from audioop import add
 import pygame
 
 from pygame.draw import *
@@ -95,6 +96,8 @@ class Window:
     self.view_modes = ['all', 'focus', 'single']
     self.view_mode_i = 0
 
+    self.show_grid = False
+
   # called each frame to render stuff to the window
   def render(self) -> None:
 
@@ -125,8 +128,8 @@ class Window:
     self.camera.fill(main_c)
 
     # origin indicator
-    ind_len = 20
-    ind_w = 3
+    ind_len = int(20 * zoom / 2)
+    ind_w = int(3 * zoom)
     line(self.camera, accent_c, (-ind_len - scroll[0], -scroll[1]), \
       (ind_len - scroll[0], -scroll[1]), ind_w)
     line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), \
@@ -183,9 +186,12 @@ class Window:
     for chunk_tag in needed_chunks:
 
       for layer in chunks.chunks[chunk_tag]['tiles']:
-        
+
         if layer not in self.render_cache:
-          self.render_cache[layer] = {}
+          self.render_cache[layer] = {
+            'tiles':{},
+            'decor':{}
+            }
         
         surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
         surf.set_colorkey((0, 0, 0))
@@ -203,7 +209,27 @@ class Window:
 
           surf.blit(tile_surf, (x, y))
 
-        self.render_cache[layer][chunk_tag] = surf
+        self.render_cache[layer]['tiles'][chunk_tag] = surf
+
+      for layer in chunks.chunks[chunk_tag]['decor']:
+
+        surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
+        surf.set_colorkey((0, 0, 0))
+
+        for decor_data in chunks.chunks[chunk_tag]['decor'][layer]:
+          rel_x, rel_y, sheet_id, row, col = decor_data
+          sheet_name = chunks.sheet_refs[sheet_id]
+          decor_surf = sheets[sheet_name][row][col]
+          
+          surf.blit(decor_surf, (rel_x, rel_y))
+
+        if layer not in self.render_cache:
+          self.render_cache[layer] = {
+            'tiles':{},
+            'decor':{}
+            }
+
+        self.render_cache[layer]['decor'][chunk_tag] = surf
 
     # grab all visible layers based on view mode
     vis_layers = []
@@ -225,18 +251,42 @@ class Window:
 
     # render the layers
     for layer in vis_layers:
-      for chunk_tag in self.render_cache[layer]:
-        chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk_tag)
-        x = chunk_x * chunk_size - scroll[0] - pad_offset
-        y = chunk_y * chunk_size - scroll[1] - pad_offset
+      for layer_type in self.render_cache[layer]:
+        for chunk_tag in self.render_cache[layer][layer_type]:
+          chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk_tag)
+          x = chunk_x * chunk_size - scroll[0] - pad_offset
+          y = chunk_y * chunk_size - scroll[1] - pad_offset
 
-        surf = self.render_cache[layer][chunk_tag]
-        
-        if self.view_mode_i == 1 and layer != curr_input_layer:
-          surf = surf.copy()
-          surf.set_alpha(120)
+          surf = self.render_cache[layer][layer_type][chunk_tag]
+          
+          if self.view_mode_i == 1 and layer != curr_input_layer:
+            surf = surf.copy()
+            surf.set_alpha(120)
 
-        self.camera.blit(surf, (x, y))
+          self.camera.blit(surf, (x, y))
+
+    # show the grid
+    if self.show_grid:
+
+      chunk_size = self.glob.chunks.TILE_SIZE * self.glob.chunks.CHUNK_SIZE
+      horiz_lines = self.camera_rect[2] // chunk_size 
+      vert_lines = self.camera_rect[3] // chunk_size
+
+      camera_x, camera_y = self.camera_rect[0:2]
+      x_start = camera_x // chunk_size * chunk_size
+      for i in range(-1, horiz_lines):
+        start = x_start - scroll[0], camera_y - scroll[1]
+        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1] 
+        line(self.camera, accent_c, start, end, max(int(zoom), 1))
+        x_start += chunk_size
+
+      y_start = camera_y // chunk_size * chunk_size
+      for i in range(-1, vert_lines + 1):
+        start = camera_x - scroll[0], y_start - scroll[1]
+        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
+        line(self.camera, accent_c, start, end, max(int(zoom), 1))
+        y_start += chunk_size
+
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
@@ -244,14 +294,21 @@ class Window:
       hover_surf.set_alpha(120)
       t_size = self.glob.chunks.TILE_SIZE
       row, col = self.curr_tex_data
+      if self.glob.input.entity_type == 'tiles':
 
-      tx = px * t_size - scroll[0]
-      ty = py * t_size - scroll[1]
-      if self.sel_sheet in sheet_config:
-        off_x, off_y = sheet_config[self.sel_sheet][row][col]
-        tx -= off_x
-        ty -= off_y
-      self.camera.blit(hover_surf, (tx, ty))
+        tx = px * t_size - scroll[0]
+        ty = py * t_size - scroll[1]
+        if self.sel_sheet in sheet_config:
+          off_x, off_y = sheet_config[self.sel_sheet][row][col]
+          tx -= off_x
+          ty -= off_y
+        self.camera.blit(hover_surf, (tx, ty))
+      elif self.glob.input.entity_type == 'decor':
+        w, h = hover_surf.get_size()
+        bx = px - w / 2 - scroll[0]
+        by = py - h / 2 - scroll[1]
+        
+        self.camera.blit(hover_surf, (bx, by))
 
     # draw the selection rect
     if self.glob.input.sel_rect:
@@ -271,6 +328,7 @@ class Window:
     current sheet : {self.sel_sheet if self.sel_sheet else ''}
     pen position : {px}, {py}
     tool : {tool}
+    entity type : {self.glob.input.entity_type}
     layer : {self.glob.input.layer}
     auto-tile : {'on' if self.glob.input.auto_tiling else 'off'}
     view mode : {self.view_modes[self.view_mode_i]}

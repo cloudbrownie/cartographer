@@ -66,7 +66,6 @@ class Input:
 
     t_size = self.glob.chunks.TILE_SIZE
     return x // t_size, y // t_size
-
   # returns the current entity type
   @property
   def entity_type(self) -> str:
@@ -105,6 +104,11 @@ class Input:
   def has_valid_sel_rect(self) -> bool:
     w, h = self.selection_rect[2:4]
     return w * h >= self.SEL_RECT_THRESOLD
+
+  # cycles through the entity types
+  def cycle_entity_type(self, value : int) -> None:
+    self.e_i += value
+    self.e_i %= len(self.e_types)
 
   # called each frame to handle all events and inputs
   def handle(self) -> None:
@@ -196,6 +200,15 @@ class Input:
           else:
             self.glob.window.cycle_view_mode(1)
 
+        elif event.key == K_e:
+          if shift:
+            self.cycle_entity_type(-1)
+          else:
+            self.cycle_entity_type(1)
+
+        elif event.key == K_g:
+          self.glob.window.show_grid = not self.glob.window.show_grid
+
       elif event.type == KEYUP:
 
         if event.key in self.arrow_bools.keys():
@@ -272,7 +285,6 @@ class Input:
         elif mx > self.glob.tbar_width:
           self.glob.adjust_cam_zoom(-event.y)
 
-
     # if holding and drawing, add to the chunk's stuff
     if self.holding:
       px, py = self.pen_pos
@@ -287,11 +299,25 @@ class Input:
           sheet_coords = self.glob.window.curr_tex_data
           curr_layer = str(self.layer)
               
-          add_tile = self.glob.chunks.add_tile(px, py, curr_layer, sheet, sheet_coords, \
-            self.auto_tiling)
+          add_tile = self.glob.chunks.add_tile(px, py, curr_layer, sheet,
+            sheet_coords, self.auto_tiling)
 
           self.last_pos = px, py
           self.prev_texture = texture
+        
+        elif self.entity_type == 'decor':
+
+          sheet = self.glob.window.sel_sheet
+          row, col = self.glob.window.curr_tex_data
+          curr_layer = str(self.layer)
+          surf = self.glob.sheets.sheets[sheet][row][col]
+          w, h = surf.get_size()
+          x = px - w / 2
+          y = py - h / 2
+
+          add_decor = self.glob.chunks.add_decor(x, y, curr_layer, sheet, 
+            (row, col), (w, h))
+          self.holding = False
 
       elif self.tool == 'erase':
 
