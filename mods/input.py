@@ -191,6 +191,10 @@ class Input:
         elif event.key == K_a and ctrl:
           if self.selected_tiles:
             self.glob.start_auto_tile(self.selected_tiles, str(self.layer))
+          elif self.has_valid_sel_rect():
+            sel_tiles = \
+              self.glob.chunks.find_bound(self.selection_rect, str(self.layer))
+            self.glob.start_auto_tile(sel_tiles, str(self.layer))
           else:
             self.auto_tiling = not self.auto_tiling
 

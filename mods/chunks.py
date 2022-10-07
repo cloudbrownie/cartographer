@@ -185,6 +185,25 @@ class Chunks:
     tile_data[3] = bitsum
     return bitsum
 
+  # return all tiles within a specified rect
+  def find_bound(self, rect : list, layer : str) -> list:
+    tiles = []
+
+    l, t, w, h = rect
+
+    # chunks encompassed by rect
+    chunks = self.get_chunks(rect)
+    for chunk_tag in chunks:
+      if layer not in self.chunks[chunk_tag]['tiles']:
+        continue
+
+      for tile in self.chunks[chunk_tag]['tiles'][layer]:
+        glob_tile_x, glob_tile_y = self.glob_tile_pos(*tile[0:2], chunk_tag)
+        if l <= glob_tile_x <= l + w and t <= glob_tile_y <= t + h:
+          tiles.append((glob_tile_x, glob_tile_y))
+        
+    return tiles
+
   # calculate the bitsum for a certain tile and fixes the bitsum for neighbors
   def auto_tile(self, x : int, y : int, layer : str) -> int:
     # bitwise algorithm and store neighbors along the way
@@ -368,7 +387,6 @@ class Chunks:
       x, y = decor_data[:2]
       w, h = decor_data[-2:]
 
-      print(rel_pos, x, y, x + w, y + h)
       if is_inbounds(rel_pos, x, y, x + w, y + h):
         self.chunks[tag]['decor'][layer].pop(i)
         possible_spill = True
