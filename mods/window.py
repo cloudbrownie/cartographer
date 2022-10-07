@@ -1,4 +1,3 @@
-from audioop import add
 import pygame
 
 from pygame.draw import *
@@ -46,10 +45,12 @@ def generate_mask(tiles : list, t_size : float) -> None:
 
 class Window:
   # init
-  def __init__(self, glob, width, height, font_size):
+  def __init__(self, glob : object, width : int, height : int, font_size : int):
     self.glob = glob
 
     pygame.init()
+
+    pygame.mouse.set_visible(False)
     
     self.window = pygame.display.set_mode((width, height))
     self.width = width
@@ -105,6 +106,7 @@ class Window:
     scroll = self.glob.scroll
     zoom = self.glob.cam_zoom
     main_c = self.glob.COLORS['main']
+    m_comp_c = self.glob.COLORS['m_comp']
     accent_c = self.glob.COLORS['accent']
     a_comp_c = self.glob.COLORS['a_comp']
     px, py = self.glob.input.pen_pos
@@ -127,9 +129,31 @@ class Window:
     # camera stuff -------------------------------------------------------------
     self.camera.fill(main_c)
 
+    # show the grid
+    if self.show_grid:
+
+      chunk_size = self.glob.chunks.TILE_SIZE * self.glob.chunks.CHUNK_SIZE
+      horiz_lines = self.camera_rect[2] // chunk_size 
+      vert_lines = self.camera_rect[3] // chunk_size
+
+      camera_x, camera_y = self.camera_rect[0:2]
+      x_start = camera_x // chunk_size * chunk_size
+      for i in range(-1, horiz_lines):
+        start = x_start - scroll[0], camera_y - scroll[1]
+        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1] 
+        line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
+        x_start += chunk_size
+
+      y_start = camera_y // chunk_size * chunk_size
+      for i in range(-1, vert_lines + 1):
+        start = camera_x - scroll[0], y_start - scroll[1]
+        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
+        line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
+        y_start += chunk_size
+
     # origin indicator
-    ind_len = int(20 * zoom / 2)
-    ind_w = int(3 * zoom)
+    ind_len = max(int(20 * zoom / 2), 1)
+    ind_w = max(int(3 * zoom), 1)
     line(self.camera, accent_c, (-ind_len - scroll[0], -scroll[1]), \
       (ind_len - scroll[0], -scroll[1]), ind_w)
     line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), \
@@ -149,6 +173,7 @@ class Window:
         blit_x = self.sel_mask_coords[0] + nx * 3 - scroll[0]
         blit_y = self.sel_mask_coords[1] + ny * 3 - scroll[1]
         self.camera.blit(self.sel_mask, (blit_x, blit_y))
+
     elif not self.glob.input.selected_tiles and self.sel_mask:
       self.sel_mask = None
 
@@ -217,7 +242,7 @@ class Window:
         surf.set_colorkey((0, 0, 0))
 
         for decor_data in chunks.chunks[chunk_tag]['decor'][layer]:
-          rel_x, rel_y, sheet_id, row, col = decor_data
+          rel_x, rel_y, sheet_id, row, col, w, h = decor_data
           sheet_name = chunks.sheet_refs[sheet_id]
           decor_surf = sheets[sheet_name][row][col]
           
@@ -264,29 +289,6 @@ class Window:
             surf.set_alpha(120)
 
           self.camera.blit(surf, (x, y))
-
-    # show the grid
-    if self.show_grid:
-
-      chunk_size = self.glob.chunks.TILE_SIZE * self.glob.chunks.CHUNK_SIZE
-      horiz_lines = self.camera_rect[2] // chunk_size 
-      vert_lines = self.camera_rect[3] // chunk_size
-
-      camera_x, camera_y = self.camera_rect[0:2]
-      x_start = camera_x // chunk_size * chunk_size
-      for i in range(-1, horiz_lines):
-        start = x_start - scroll[0], camera_y - scroll[1]
-        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1] 
-        line(self.camera, accent_c, start, end, max(int(zoom), 1))
-        x_start += chunk_size
-
-      y_start = camera_y // chunk_size * chunk_size
-      for i in range(-1, vert_lines + 1):
-        start = camera_x - scroll[0], y_start - scroll[1]
-        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
-        line(self.camera, accent_c, start, end, max(int(zoom), 1))
-        y_start += chunk_size
-
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
@@ -408,6 +410,13 @@ class Window:
     start_p = self.glob.tbar_width * 0.1, self.div_height
     end_p = self.glob.tbar_width * 0.9, self.div_height
     line(self.window, a_comp_c, start_p, end_p, 3)
+
+    pygame.draw.rect(self.window, (255, 255, 255), self.glob.input.cursor)
+
+    cursor_ctr = self.glob.input.cursor.center
+    border_rect = pygame.Rect(0, 0, 25, 25)
+    border_rect.center = cursor_ctr
+    pygame.draw.rect(self.window, (255, 255, 255), border_rect, 2)
 
     pygame.display.update()
 

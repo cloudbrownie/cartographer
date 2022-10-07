@@ -120,9 +120,10 @@ def auto_tile(tiles : list, layer : str, chunks : Chunks, q : Queue) -> None:
 
 class Glob:
   # init
-  def __init__(self, w_width, w_height):
+  def __init__(self, w_width : int, w_height : int):
     self.COLORS = {
       'main':hex_to_rgb('1a1a1d'),
+      'm_comp':hex_to_rgb('4e4e50'),
       'accent':hex_to_rgb('c3073f'),
       'a_comp':hex_to_rgb('950740')
     }

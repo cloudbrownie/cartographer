@@ -2,8 +2,7 @@
 from mods.glob import Glob
 
 if __name__ == '__main__':
-  glob = Glob(1000, 700)
-
+  glob = Glob(1200, 800)
   # window loop
   while 1:
 

@@ -58,14 +58,15 @@ class Input:
     ratio = self.glob.window.camera_ratio
     zoom = self.glob.cam_zoom
     mx, my = self.mouse_pos
-    x = round((mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0], 2)
-    y = round(my * ratio[1] * zoom + scroll[1])
+    x = (mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0]
+    y = my * ratio[1] * zoom + scroll[1]
 
     if self.entity_type != 'tiles' or self.tool == 'select':
       return x, y
 
     t_size = self.glob.chunks.TILE_SIZE
     return x // t_size, y // t_size
+
   # returns the current entity type
   @property
   def entity_type(self) -> str:
@@ -79,7 +80,7 @@ class Input:
   # returns the normalized selection rect
   @property
   def selection_rect(self) -> list:
-    if len(self.sel_rect) < 2:
+    if not self.sel_rect:
       return 0, 0, 0, 0
 
     if len(self.sel_rect) == 1:
@@ -115,6 +116,8 @@ class Input:
 
     mx, my = pygame.mouse.get_pos()
     self.mouse_pos = mx, my
+    self.cursor.centerx = mx
+    self.cursor.centery = my
 
     keys = pygame.key.get_pressed()
     ctrl = keys[K_LCTRL] or keys[K_RCTRL]
@@ -288,6 +291,7 @@ class Input:
     # if holding and drawing, add to the chunk's stuff
     if self.holding:
       px, py = self.pen_pos
+      curr_layer = str(self.layer)
 
       texture = self.glob.window.sel_tex
       if self.tool == 'draw' and texture:
@@ -297,7 +301,6 @@ class Input:
     
           sheet = self.glob.window.sel_sheet
           sheet_coords = self.glob.window.curr_tex_data
-          curr_layer = str(self.layer)
               
           add_tile = self.glob.chunks.add_tile(px, py, curr_layer, sheet,
             sheet_coords, self.auto_tiling)
@@ -309,7 +312,6 @@ class Input:
 
           sheet = self.glob.window.sel_sheet
           row, col = self.glob.window.curr_tex_data
-          curr_layer = str(self.layer)
           surf = self.glob.sheets.sheets[sheet][row][col]
           w, h = surf.get_size()
           x = px - w / 2
@@ -323,10 +325,14 @@ class Input:
 
         if self.entity_type == 'tiles' and (px, py) != self.last_pos:
 
-          curr_layer = str(self.layer)
           del_tile = self.glob.chunks.remove_tile(px, py, curr_layer, \
             self.auto_tiling)
           self.last_pos = px, py
+
+        elif self.entity_type == 'decor':
+
+          sheet = self.glob.window.sel_sheet
+          del_decor = self.glob.chunks.remove_decor(px, py, curr_layer)
 
     # move the scroll target with the arrows
     for key in self.arrow_bools:

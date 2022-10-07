@@ -1,4 +1,4 @@
-# tile data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col]
+# tile data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col, w, h]
 # decor data format : [rel_x, rel_y, sheet_id, sheet_row, sheet_col]
 import chunk
 from copy import deepcopy
@@ -267,7 +267,7 @@ class Chunks:
 
   # removes a tile from a layer in a chunk
   def remove_tile(self, x : float, y : float, layer : str, \
-      auto_tile : bool = False) -> None:
+      auto_tile : bool = False) -> tuple[int, int]:
     chunk_x, chunk_y = self.chunk_pos(x, y)
     tag = self.get_chunk_tag(chunk_x, chunk_y)
 
@@ -292,7 +292,8 @@ class Chunks:
     tag = self.get_chunk_tag(chunk_x, chunk_y)
     sheet_id = self.get_sheet_id(sheet_name)
     rel_pos = self.rel_decor_pos(x, y)
-    decor_data = [*rel_pos, sheet_id, *sheet_coords]
+    w, h = size
+    decor_data = [*rel_pos, sheet_id, *sheet_coords, w, h]
 
     # case: chunk doesn't exist
     if tag not in self.chunks:
@@ -309,7 +310,6 @@ class Chunks:
     self.re_render.add(tag)
 
     # check for spillover
-    w, h = size
     bot_right = x + w, y + h
     diag_chunk_x, diag_chunk_y = self.chunk_pos(*bot_right, tile=False)
     horiz_chunks = diag_chunk_x - chunk_x
@@ -353,9 +353,65 @@ class Chunks:
     return x, y
 
   # removes a decor from a layer in a chunk; also removes decor from 
-  def remove_decor(self):
-    return
-    
+  def remove_decor(self, x : float, y : float, layer : str) -> tuple[int, int]:
+
+    # find decor
+    chunk_x, chunk_y = self.chunk_pos(x, y, tile=False)
+    tag = self.get_chunk_tag(chunk_x, chunk_y)
+
+    if tag not in self.chunks or layer not in self.chunks[tag]['decor']:
+      return
+
+    possible_spill = False
+    rel_pos = self.rel_decor_pos(x, y)
+    for i, decor_data in enumerate(self.chunks[tag]['decor'][layer]):
+      x, y = decor_data[:2]
+      w, h = decor_data[-2:]
+
+      print(rel_pos, x, y, x + w, y + h)
+      if is_inbounds(rel_pos, x, y, x + w, y + h):
+        self.chunks[tag]['decor'][layer].pop(i)
+        possible_spill = True
+        break
+      
+    if not possible_spill:
+      return
+
+    # find spill over chunks
+    bot_right = x + w, y + h
+    diag_chunk_x, diag_chunk_y = self.chunk_pos(*bot_right, tile=False)
+    horiz_chunks = diag_chunk_x - chunk_x
+    vert_chunks = diag_chunk_y - chunk_y
+
+    spill_chunks = []
+    for i in range(horiz_chunks):
+      spill_chunks.append([i + 1, 0])
+
+    for j in range(vert_chunks):
+      for _, spill_chunk in enumerate(spill_chunks.copy()):
+        spill_chunks.append([spill_chunk[0], j + 1])
+      
+      spill_chunks.append([0, j + 1])
+
+    chunk_size = self.CHUNK_SIZE * self.TILE_SIZE
+    for i, j in spill_chunks:
+      n_chunk_x = chunk_x + i
+      n_chunk_y = chunk_y + j
+      spill_tag = self.get_chunk_tag(n_chunk_x, n_chunk_y)
+      if spill_tag not in self.chunks or layer not in \
+          self.chunks[spill_tag]['decor']:
+        continue
+
+      spill_x, spill_y = decor_data[:2]
+      spill_x -= i * chunk_size
+      spill_y -= j * chunk_size
+
+      for i, o_decor_data in enumerate(self.chunks[spill_tag]['decor'][layer]):
+        x, y = o_decor_data[:2]
+        w, h = o_decor_data[-2:]
+        if is_inbounds((spill_x, spill_y), x, y, x + w, y + h):
+          self.chunks[spill_tag]['decor'][layer].pop(i)
+          return spill_x, spill_y
 
   # return a list of chunks from chunk list that are within a specified rect
   def get_chunks(self, rect : tuple, skip_empty : bool = True) -> list[str]:
