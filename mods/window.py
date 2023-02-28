@@ -51,7 +51,7 @@ class Window:
     pygame.init()
 
     pygame.mouse.set_visible(False)
-    
+
     self.window = pygame.display.set_mode((width, height))
     self.width = width
     self.height = height
@@ -111,15 +111,10 @@ class Window:
     a_comp_c = self.glob.COLORS['a_comp']
     px, py = self.glob.input.pen_pos
     tool = self.glob.input.tool
-    cam_rect = *scroll, *self.glob.curr_cam_size
 
-    chunks = self.glob.chunks
     chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
-    padded_chunk_size = self.glob.chunks.CHUNK_PX
-    pad_offset = self.glob.chunks.SURF_PADDING
     t_size = self.glob.chunks.TILE_SIZE
 
-    sheets = self.glob.sheets.sheets
     sheet_config = self.glob.sheets.sheet_configs
 
     cam_size = self.glob.cam_scale_size
@@ -133,14 +128,14 @@ class Window:
     if self.show_grid:
 
       chunk_size = self.glob.chunks.TILE_SIZE * self.glob.chunks.CHUNK_SIZE
-      horiz_lines = self.camera_rect[2] // chunk_size 
+      horiz_lines = self.camera_rect[2] // chunk_size
       vert_lines = self.camera_rect[3] // chunk_size
 
       camera_x, camera_y = self.camera_rect[0:2]
       x_start = camera_x // chunk_size * chunk_size
       for i in range(-1, horiz_lines):
         start = x_start - scroll[0], camera_y - scroll[1]
-        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1] 
+        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1]
         line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
         x_start += chunk_size
 
@@ -167,8 +162,8 @@ class Window:
         self.sel_mask = surf
         self.sel_mask_coords = x, y
 
-      # blit with offsets in 8 directions      
-      for nx, ny in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), 
+      # blit with offsets in 8 directions
+      for nx, ny in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1),
                                                             (-1, 1), (-1, -1)]:
         blit_x = self.sel_mask_coords[0] + nx * 3 - scroll[0]
         blit_y = self.sel_mask_coords[1] + ny * 3 - scroll[1]
@@ -177,118 +172,18 @@ class Window:
     elif not self.glob.input.selected_tiles and self.sel_mask:
       self.sel_mask = None
 
-    # draw all chunks to the camera
-    needed_chunks = []
-    vis_chunks = chunks.get_chunks(cam_rect)
+    # new rendering system
+    layers = self.glob.tilemap.get_visible(self.camera_rect.topleft,
+                                          self.camera_rect.size)
+    for layer_data in layers:
+      for raw_tile in layer_data:
+        x, y = raw_tile[0]
 
-    # remove non visible chunks from list of chunks to be rendered
-    for chunk_tag in list(self.render_cache.keys()):
-      if chunk_tag not in vis_chunks:
-        del self.render_cache[chunk_tag]
+        offsets = self.glob.sheets.get_config_info(*raw_tile[1])
 
-    # add visible but not cached chunks
-    for chunk_tag in vis_chunks:
-      if chunk_tag not in self.render_cache:
-        needed_chunks.append(chunk_tag)
-
-    # add chunks needed to be rerendered
-    for chunk_tag in list(chunks.re_render):
-      if chunk_tag in vis_chunks:
-        needed_chunks.append(chunk_tag)
-        chunks.re_render.remove(chunk_tag)
-
-    # remove nonvisible chunks from cache
-    for layer in list(self.render_cache.keys()):
-      for chunk_tag in list(self.render_cache[layer]):
-        if chunk_tag not in vis_chunks:
-          del self.render_cache[layer][chunk_tag]
-
-      # remove empty layers
-      if not self.render_cache[layer]:
-        del self.render_cache[layer]
-
-    # iterate through needed chunks and render them to cache
-    for chunk_tag in needed_chunks:
-
-      for layer in chunks.chunks[chunk_tag]['tiles']:
-
-        if layer not in self.render_cache:
-          self.render_cache[layer] = {
-            'tiles':{},
-            'decor':{}
-            }
-        
-        surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
-        surf.set_colorkey((0, 0, 0))
-
-        for tile_data in chunks.chunks[chunk_tag]['tiles'][layer]:
-          x, y, sheet_id, row, col = tile_data
-          sheet_name = chunks.sheet_refs[sheet_id]
-          x = x * t_size + pad_offset
-          y = y * t_size + pad_offset
-          if sheet_name in sheet_config:
-            off_x, off_y = sheet_config[sheet_name][row][col]
-            x += off_x
-            y += off_y
-          tile_surf = sheets[sheet_name][row][col]
-
-          surf.blit(tile_surf, (x, y))
-
-        self.render_cache[layer]['tiles'][chunk_tag] = surf
-
-      for layer in chunks.chunks[chunk_tag]['decor']:
-
-        surf = pygame.Surface((padded_chunk_size, padded_chunk_size))
-        surf.set_colorkey((0, 0, 0))
-
-        for decor_data in chunks.chunks[chunk_tag]['decor'][layer]:
-          rel_x, rel_y, sheet_id, row, col, w, h = decor_data
-          sheet_name = chunks.sheet_refs[sheet_id]
-          decor_surf = sheets[sheet_name][row][col]
-          
-          surf.blit(decor_surf, (rel_x, rel_y))
-
-        if layer not in self.render_cache:
-          self.render_cache[layer] = {
-            'tiles':{},
-            'decor':{}
-            }
-
-        self.render_cache[layer]['decor'][chunk_tag] = surf
-
-    # grab all visible layers based on view mode
-    vis_layers = []
-    curr_input_layer = str(self.glob.input.layer)
-    if self.view_mode_i == 0:
-      vis_layers = list(self.render_cache.keys())
-
-    elif self.view_mode_i == 1:
-      for layer in list(self.render_cache.keys()):
-        if int(layer) > int(curr_input_layer):
-          break
-        vis_layers.append(layer)
-
-    elif self.view_mode_i == 2 and curr_input_layer in self.render_cache:
-      vis_layers.append(curr_input_layer)
-
-    # sort the layers
-    vis_layers = sorted(vis_layers)
-
-    # render the layers
-    for layer in vis_layers:
-      for layer_type in self.render_cache[layer]:
-        for chunk_tag in self.render_cache[layer][layer_type]:
-          chunk_x, chunk_y = chunks.deformat_chunk_tag(chunk_tag)
-          x = chunk_x * chunk_size - scroll[0] - pad_offset
-          y = chunk_y * chunk_size - scroll[1] - pad_offset
-
-          surf = self.render_cache[layer][layer_type][chunk_tag]
-          
-          if self.view_mode_i == 1 and layer != curr_input_layer:
-            surf = surf.copy()
-            surf.set_alpha(120)
-
-          self.camera.blit(surf, (x, y))
+        x -= scroll[0] + offsets[0]
+        y -= scroll[1] + offsets[1]
+        self.camera.blit(self.glob.sheets.get_asset(*raw_tile[1]), (x, y))
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
@@ -309,7 +204,7 @@ class Window:
         w, h = hover_surf.get_size()
         bx = px - w / 2 - scroll[0]
         by = py - h / 2 - scroll[1]
-        
+
         self.camera.blit(hover_surf, (bx, by))
 
     # draw the selection rect
@@ -380,7 +275,7 @@ class Window:
 
           x += w + res_x
           height = max(height, h)
-        
+
         y += height + res_y
         x = res_x
 
@@ -395,7 +290,7 @@ class Window:
       hover_y = my
       y_dif = hover_y - y_pos
 
-      # render sheet names with dashes if needed 
+      # render sheet names with dashes if needed
       if f == self.sel_sheet:
         self.glob.font.render_txt('-', self.window, (x_pos, y_pos))
         x_pos = 20
@@ -413,14 +308,15 @@ class Window:
 
     pygame.draw.rect(self.window, (255, 255, 255), self.glob.input.cursor)
 
+    # draws the cursor
     cursor_ctr = self.glob.input.cursor.center
     border_rect = pygame.Rect(0, 0, 25, 25)
     border_rect.center = cursor_ctr
-    pygame.draw.rect(self.window, (255, 255, 255), border_rect, 2)
+    #pygame.draw.rect(self.window, (255, 255, 255), border_rect, 2)
 
     pygame.display.update()
 
-  # sets the current sheet info 
+  # sets the current sheet info
   def set_selected_sheet(self, sheet : str) -> None:
     self.sel_sheet = sheet
     self.curr_sheet = self.glob.sheets.sheets[self.sel_sheet]
@@ -465,7 +361,7 @@ class Window:
 
   # update the camera size
   def update_camera_size(self) -> None:
-    
+
     zoom = self.glob.cam_zoom
 
     base_w, base_h = self.glob.base_cam_size

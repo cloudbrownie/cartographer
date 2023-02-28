@@ -15,7 +15,7 @@ class Sheets:
     }
 
     self.sheet_configs = {
-      
+
     }
 
     # grab all .png files in the input dir
@@ -45,13 +45,13 @@ class Sheets:
                 if sheet_surf.get_at((x, y)) == (0, 255, 255, 255):
                   h = y - i - 1
                   break
-              
+
               surf = Surface((w, h))
               surf.set_colorkey(TRANSPARENT_COLOR)
               surf.blit(sheet_surf, (0, 0), (j + 1, i + 1, w, h))
               row.append(surf)
           textures.append(row)
-        
+
         self.sheets[f] = textures
 
       # try to find configuration files
@@ -63,3 +63,12 @@ class Sheets:
   @property
   def sheet_names(self) -> list[str]:
     return [sheet for sheet in self.sheets]
+
+  # returns surface given a sheet name with a row and col value
+  def get_asset(self, sheet, row, col) -> Surface:
+    return self.sheets[sheet][row][col]
+
+  def get_config_info(self, sheet, row, col) -> tuple:
+    if sheet in self.sheet_configs:
+      return self.sheet_configs[sheet][row][col]
+    return 0, 0
