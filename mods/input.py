@@ -178,10 +178,10 @@ class Input:
         elif event.key == K_d and ctrl and self.entity_type == 'tiles':
 
           if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
-            rect = self.selection_rect
+            rect = pygame.Rect(*self.selection_rect)
           else:
             rect = self.glob.window.camera_rect
-          self.glob.start_cull(self.entity_type, self.layer, rect)
+          self.glob.tilemap.cull(self.layer, rect, self.auto_tiling)
           self.selected_tiles.clear()
 
         elif event.key == K_h:

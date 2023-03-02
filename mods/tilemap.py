@@ -133,12 +133,20 @@ class TileMap:
       if neighbor in self.tiles and layer in self.tiles[neighbor]:
         self.calculate_bitsum(neighbor, layer, True)
 
-  def get_tiles(self, rect: pygame.Rect, layer: str, f: callable=None) -> list:
+  def get_tiles(self, rect: pygame.Rect, layer: str, f: callable=None,
+                inclusive: bool=True) -> list:
     tiles = []
-    pos = (int(round(rect.x / self.tile_size - 0.5, 0)),
-           int(round(rect.y / self.tile_size - 0.5, 0)))
-    for x in range(math.ceil(rect.w / self.tile_size) + 1):
-      for y in range(math.ceil(rect.h / self.tile_size) + 1):
+    if inclusive:
+      pos = (int(round(rect.x / self.tile_size - 0.5, 0)),
+             int(round(rect.y / self.tile_size - 0.5, 0)))
+      ranges = (math.ceil(rect.w / self.tile_size) + 1,
+                math.ceil(rect.h / self.tile_size) + 1)
+    else:
+      pos = int(rect.x / self.tile_size), int(rect.y / self.tile_size)
+      ranges = (math.ceil(rect.w / self.tile_size),
+                math.ceil(rect.h / self.tile_size))
+    for x in range(ranges[0]):
+      for y in range(ranges[1]):
         curr_pos = pos[0] + x, pos[1] + y
         if curr_pos in self.tiles and layer in self.tiles[curr_pos]:
           if f:
@@ -183,6 +191,6 @@ class TileMap:
     return len(new_tiles)
 
   def cull(self, layer: str, rect: pygame.Rect, autotile: bool=False) -> int:
-    tiles = self.get_tiles(rect, layer, lambda x: x['pos'])
+    tiles = self.get_tiles(rect, layer, lambda x: x['pos'], False)
     for tile_pos in tiles:
-      self.remove_tile(tile_pos, layer)
+      self.remove_tile(tile_pos, layer, autotile)
