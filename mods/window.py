@@ -109,13 +109,9 @@ class Window:
     m_comp_c = self.glob.COLORS['m_comp']
     accent_c = self.glob.COLORS['accent']
     a_comp_c = self.glob.COLORS['a_comp']
+    muted_comp = tuple(max(a_comp_c[i] / ((i + 1) * 2), 0) for i in range(3))
     px, py = self.glob.input.pen_pos
     tool = self.glob.input.tool
-
-    chunk_size = self.glob.chunks.CHUNK_SIZE * self.glob.chunks.TILE_SIZE
-    t_size = self.glob.chunks.TILE_SIZE
-
-    sheet_config = self.glob.sheets.sheet_configs
 
     cam_size = self.glob.cam_scale_size
 
@@ -127,20 +123,40 @@ class Window:
     # show the grid
     if self.show_grid:
 
-      chunk_size = self.glob.chunks.TILE_SIZE * self.glob.chunks.CHUNK_SIZE
-      horiz_lines = self.camera_rect[2] // chunk_size
-      vert_lines = self.camera_rect[3] // chunk_size
-
+      chunk_size = self.glob.chunk_size
+      tile_size = self.glob.tile_size
+      h_chunk_lines = self.camera_rect[2] // chunk_size
+      v_chunk_lines = self.camera_rect[3] // chunk_size
       camera_x, camera_y = self.camera_rect[0:2]
+
+      # tile grid
+      h_tile_lines = self.camera_rect[2] // tile_size
+      v_tile_lines = self.camera_rect[3] // tile_size
+
+      x_start = camera_x // tile_size * tile_size
+      for i in range(-1, h_tile_lines):
+        start = x_start - scroll[0], camera_y - scroll[1]
+        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1]
+        line(self.camera, muted_comp, start, end, max(int(zoom), 1))
+        x_start += tile_size
+
+      y_start = camera_y // tile_size * tile_size
+      for i in range(-1, v_tile_lines + 1):
+        start = camera_x - scroll[0], y_start - scroll[1]
+        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
+        line(self.camera, muted_comp, start, end, max(int(zoom), 1))
+        y_start += tile_size
+
+      # chunk grid
       x_start = camera_x // chunk_size * chunk_size
-      for i in range(-1, horiz_lines):
+      for i in range(-1, h_chunk_lines):
         start = x_start - scroll[0], camera_y - scroll[1]
         end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1]
         line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
         x_start += chunk_size
 
       y_start = camera_y // chunk_size * chunk_size
-      for i in range(-1, vert_lines + 1):
+      for i in range(-1, v_chunk_lines + 1):
         start = camera_x - scroll[0], y_start - scroll[1]
         end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
         line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
@@ -181,8 +197,8 @@ class Window:
 
         offsets = self.glob.sheets.get_config_info(*raw_tile[1])
 
-        x -= scroll[0] + offsets[0]
-        y -= scroll[1] + offsets[1]
+        x -= scroll[0] - offsets[0]
+        y -= scroll[1] - offsets[1]
         self.camera.blit(self.glob.sheets.get_asset(*raw_tile[1]), (x, y))
 
     # draw tile highlight at current pen position
@@ -195,10 +211,9 @@ class Window:
 
         tx = px * t_size - scroll[0]
         ty = py * t_size - scroll[1]
-        if self.sel_sheet in sheet_config:
-          off_x, off_y = sheet_config[self.sel_sheet][row][col]
-          tx -= off_x
-          ty -= off_y
+        offsets = self.glob.sheets.get_config_info(self.sel_sheet, row, col)
+        tx += offsets[0]
+        ty += offsets[1]
         self.camera.blit(hover_surf, (tx, ty))
       elif self.glob.input.entity_type == 'decor':
         w, h = hover_surf.get_size()

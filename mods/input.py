@@ -27,7 +27,7 @@ class Input:
     self.e_types = ['tiles', 'decor']
     self.e_i = 0
 
-    self.layer = 0
+    self._layer = 0
     self.holding = False
     self.last_pos = None
     self.prev_texture = None
@@ -66,6 +66,10 @@ class Input:
 
     t_size = self.glob.chunks.TILE_SIZE
     return x // t_size, y // t_size
+
+  @property
+  def layer(self) -> str:
+    return str(self._layer)
 
   # returns the current entity type
   @property
@@ -152,7 +156,7 @@ class Input:
             self.glob.adjust_cam_zoom(vals[event.key])
 
           elif shift:
-            self.layer -= vals[event.key]
+            self._layer -= vals[event.key]
 
         elif event.key in [K_1, K_2, K_3]:
           self.tool_i = event.key - K_1
@@ -160,14 +164,15 @@ class Input:
         elif event.key == K_f and ctrl and self.entity_type == 'tiles' and \
             self.glob.window.sel_tex:
           if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
-            rect = self.selection_rect
+            rect = pygame.Rect(*self.selection_rect)
           else:
             rect = self.glob.window.camera_rect
-          pos = self.pen_pos
-          curr_layer = str(self.layer)
-          sheet_name = self.glob.window.sel_sheet
-          sheet_coords = self.glob.window.curr_tex_data
-          self.glob.start_flood(pos, curr_layer, rect, sheet_name, sheet_coords)
+
+          sheet = self.glob.window.sel_sheet
+          row, col = self.glob.window.curr_tex_data
+
+          self.glob.tilemap.flood(self.pen_pos, self.layer, rect,
+                                  (sheet, row, col), self.auto_tiling)
           self.selected_tiles.clear()
 
         elif event.key == K_d and ctrl and self.entity_type == 'tiles':
@@ -176,7 +181,7 @@ class Input:
             rect = self.selection_rect
           else:
             rect = self.glob.window.camera_rect
-          self.glob.start_cull(self.entity_type, str(self.layer), rect)
+          self.glob.start_cull(self.entity_type, self.layer, rect)
           self.selected_tiles.clear()
 
         elif event.key == K_h:
@@ -192,11 +197,11 @@ class Input:
 
         elif event.key == K_a and ctrl:
           if self.selected_tiles:
-            self.glob.start_auto_tile(self.selected_tiles, str(self.layer))
+            self.glob.start_auto_tile(self.selected_tiles, self.layer)
           elif self.has_valid_sel_rect():
-            sel_tiles = \
-              self.glob.chunks.mask_select(self.selection_rect, str(self.layer))
-            self.glob.start_auto_tile(sel_tiles, str(self.layer))
+            sel_tiles = self.glob.chunks.mask_select(self.selection_rect,
+                                                     self.layer)
+            self.glob.start_auto_tile(sel_tiles, self.layer)
           else:
             self.auto_tiling = not self.auto_tiling
 
@@ -246,10 +251,11 @@ class Input:
 
             elif ctrl and shift and self.entity_type == 'tiles':
               px, py = self.pen_pos
-              curr_layer = str(self.layer)
+              curr_layer = self.layer
               rect = self.glob.window.camera_rect
-              self.selected_tiles = self.glob.chunks.mask_select(px, py, \
-                curr_layer, rect)
+              self.selected_tiles = self.glob.chunks.mask_select(px, py,
+                                                                 curr_layer,
+                                                                 rect)
             else:
               self.holding = True
               self.selected_tiles.clear()
@@ -300,7 +306,7 @@ class Input:
     # if holding and drawing, add to the chunk's stuff
     if self.holding:
       px, py = self.pen_pos
-      layer = str(self.layer)
+      layer = self.layer
 
       texture = self.glob.window.sel_tex
       if self.tool == 'draw' and texture:
@@ -312,11 +318,8 @@ class Input:
           row, col = self.glob.window.curr_tex_data
 
           # new method for adding tiles to tilemap
-          self.glob.tilemap.add_tile(self.pen_pos, 'tile', \
-                                    (sheet, row, col), layer)
-
-          if self.auto_tiling:
-            self.glob.tilemap.auto_tile(self.pen_pos, layer)
+          self.glob.tilemap.add_tile(self.pen_pos, 'tile', (sheet, row, col),
+                                     layer, self.auto_tiling)
 
           self.last_pos = px, py
           self.prev_texture = texture
@@ -331,7 +334,7 @@ class Input:
           x = px - w / 2
           y = py - h / 2
 
-          add_decor = self.glob.chunks.add_decor(x, y, layer, sheet,
+          add_decor = self.glob.chunks.add_decor(x, y, _layer, sheet,
             (row, col), (w, h))
           self.holding = False
         '''
@@ -340,15 +343,15 @@ class Input:
 
         if self.entity_type == 'tiles' and (px, py) != self.last_pos:
 
-          del_tile = self.glob.chunks.remove_tile(px, py, layer, \
-            self.auto_tiling)
+          self.glob.tilemap.remove_tile(self.pen_pos, layer, self.auto_tiling)
+
           self.last_pos = px, py
 
         '''
         elif self.entity_type == 'decor':
 
           sheet = self.glob.window.sel_sheet
-          del_decor = self.glob.chunks.remove_decor(px, py, layer)
+          del_decor = self.glob.chunks.remove_decor(px, py, _layer)
         '''
 
     # move the scroll target with the arrows
