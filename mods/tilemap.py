@@ -123,16 +123,20 @@ class TileMap:
     self.calculate_bitsum(pos, layer, sset)
     self._update_neighbor_bitsums(pos, layer)
 
+  # returns a tiles raw data
   def get_tile(self, pos: tuple, layer: str) -> tuple:
     if pos in self.tiles and layer in self.tiles[pos]:
       return self.tiles[pos][layer]['raw']
 
+  # private method used for updating neighbor bitsums for autotiling
+  # (assumes tile can be autotiled)
   def _update_neighbor_bitsums(self, pos: tuple, layer: str) -> None:
     for x, y in neighbors:
       neighbor = pos[0] + x, pos[1] + y
       if neighbor in self.tiles and layer in self.tiles[neighbor]:
         self.calculate_bitsum(neighbor, layer, True)
 
+  # returns all tiles within specified rect
   def get_tiles(self, rect: pygame.Rect, layer: str, f: callable=None,
                 inclusive: bool=True) -> list:
     tiles = []
@@ -156,6 +160,7 @@ class TileMap:
 
     return tiles
 
+  # flood fills an area with tiles and can autotile the tiles too
   def flood(self, pos: tuple, layer: str, rect: pygame.Rect,
             asset: tuple, autotile: bool=False) -> int:
 
@@ -190,7 +195,41 @@ class TileMap:
 
     return len(new_tiles)
 
+  # culls all tiles within a specified rect
   def cull(self, layer: str, rect: pygame.Rect, autotile: bool=False) -> int:
     tiles = self.get_tiles(rect, layer, lambda x: x['pos'], False)
     for tile_pos in tiles:
       self.remove_tile(tile_pos, layer, autotile)
+
+  # returns all tiles connected to the tile at pos
+  def select(self, pos: tuple, layer: str) -> list:
+    open_l = [pos]
+    closed_l = []
+
+    if pos not in self.tiles or layer not in self.tiles[pos]:
+      return []
+
+    tiles = []
+
+    while len(open_l) > 0:
+      curr = open_l.pop(0)
+
+      for x, y in neighbors:
+        neighbor = curr[0] + x, curr[1] + y
+        if neighbor in closed_l:
+          continue
+
+        if neighbor in self.tiles and layer in self.tiles[neighbor]:
+          open_l.append(neighbor)
+
+      closed_l.append(curr)
+      tiles.append(self.tiles[curr][layer]['raw'])
+
+    return tiles
+
+  # assumes tiles input is of tile raw data, converts raw data into tiled data
+  def tilify(self, tiles: list) -> list:
+    tiled = []
+    for (x, y), _ in tiles:
+      tiled.append((x // self.tile_size, y // self.tile_size))
+    return tiled
