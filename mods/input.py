@@ -4,6 +4,8 @@ import pygame, sys
 from pygame.locals import *
 from math import floor, ceil
 
+RECT_THRESHOLD = 64
+
 class Input:
   # init
   def __init__(self, glob):
@@ -14,8 +16,8 @@ class Input:
 
     self.glob = glob
 
-    self.sel_rect = []
-    self.SEL_RECT_THRESOLD = 64
+    self.last_pos = None
+    self.selection = None
 
     self.mouse_pos = 0, 0
 
@@ -54,18 +56,23 @@ class Input:
   # returns the pen position relative to camera
   @property
   def pen_pos(self) -> tuple[float, float]:
+    x, y = self.canvas_pos
+
+    if self.entity_type != 'tiles' or self.tool == 'select':
+      return x, y
+
+    t_size = self.glob.TILE_SIZE
+    return x // t_size, y // t_size
+
+  @property
+  def canvas_pos(self) -> tuple[float, float]:
     scroll = self.glob.scroll
     ratio = self.glob.window.camera_ratio
     zoom = self.glob.cam_zoom
     mx, my = self.mouse_pos
     x = (mx - self.glob.tbar_width) * ratio[0] * zoom + scroll[0]
     y = my * ratio[1] * zoom + scroll[1]
-
-    if self.entity_type != 'tiles' or self.tool == 'select':
-      return x, y
-
-    t_size = self.glob.chunks.TILE_SIZE
-    return x // t_size, y // t_size
+    return x, y
 
   @property
   def layer(self) -> str:
@@ -81,34 +88,24 @@ class Input:
   def tool(self) -> str:
     return self.tools[self.tool_i]
 
-  # returns the normalized selection rect
-  @property
-  def selection_rect(self) -> list:
-    if not self.sel_rect:
-      return 0, 0, 0, 0
+  # generates selection rect
+  def generate_rect(self, pos: tuple, tiled: bool) -> pygame.Rect:
+    if not self.last_pos:
+      return None
 
-    if len(self.sel_rect) == 1:
-      p2 = self.pen_pos
-    else:
-      p2 = self.sel_rect[1]
+    x = min(self.last_pos[0], pos[0])
+    y = min(self.last_pos[1], pos[1])
+    w = max(self.last_pos[0], pos[0]) - x
+    h = max(self.last_pos[1], pos[1]) - y
 
-    left, top, right, bot = *self.sel_rect[0], *p2
-    if right < left:
-      left, right = right, left
-    if bot < top:
-      top, bot = bot, top
+    if tiled:
+      tile_size = self.glob.tilemap.tile_size
+      x = floor(x / tile_size) * tile_size
+      y = floor(y / tile_size) * tile_size
+      w = ceil(w / tile_size) * tile_size - 1
+      h = ceil(h / tile_size) * tile_size - 1
 
-    w = right - left
-    h = bot - top
-    if w * h < self.SEL_RECT_THRESOLD:
-      return 0, 0, 0, 0
-
-    return left, top, w, h
-
-  # returns if the current selection rect is valid
-  def has_valid_sel_rect(self) -> bool:
-    w, h = self.selection_rect[2:4]
-    return w * h >= self.SEL_RECT_THRESOLD
+    return pygame.Rect(x, y, w, h)
 
   # cycles through the entity types
   def cycle_entity_type(self, value : int) -> None:
@@ -136,13 +133,12 @@ class Input:
       elif event.type == KEYDOWN:
 
         if event.key == K_ESCAPE:
-          if self.has_valid_sel_rect():
-            self.sel_rect = []
-          elif self.glob.window.sel_tex:
+          if self.glob.window.sel_tex:
             self.glob.window.sel_tex = None
-          else:
-            pygame.quit()
-            sys.exit()
+          if self.selected_tiles:
+            self.selected_tiles.clear()
+          if self.selection:
+            self.selection = None
 
         elif event.key in self.arrow_bools.keys() and not ctrl and not shift:
           self.arrow_bools[event.key] = True
@@ -163,8 +159,8 @@ class Input:
 
         elif event.key == K_f and ctrl and self.entity_type == 'tiles' and \
             self.glob.window.sel_tex:
-          if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
-            rect = pygame.Rect(*self.selection_rect)
+          if self.selection:
+            rect = self.selection
           else:
             rect = self.glob.window.camera_rect
 
@@ -177,8 +173,8 @@ class Input:
 
         elif event.key == K_d and ctrl and self.entity_type == 'tiles':
 
-          if self.has_valid_sel_rect() and len(self.sel_rect) > 1:
-            rect = pygame.Rect(*self.selection_rect)
+          if self.selection:
+            rect = self.selection
           else:
             rect = self.glob.window.camera_rect
           self.glob.tilemap.cull(self.layer, rect, self.auto_tiling)
@@ -197,11 +193,9 @@ class Input:
 
         elif event.key == K_a and ctrl:
           if self.selected_tiles:
-            self.glob.start_auto_tile(self.selected_tiles, self.layer)
-          elif self.has_valid_sel_rect():
-            sel_tiles = self.glob.chunks.mask_select(self.selection_rect,
-                                                     self.layer)
-            self.glob.start_auto_tile(sel_tiles, self.layer)
+            for pos in self.glob.tilemap.tilify(self.selected_tiles):
+              self.glob.tilemap.auto_tile(pos, self.layer, True)
+            self.glob.window.generate_mask()
           else:
             self.auto_tiling = not self.auto_tiling
 
@@ -246,19 +240,25 @@ class Input:
 
           elif mx > self.glob.tbar_width:
 
-            if self.tool == 'select':
-              self.sel_rect = [self.pen_pos]
+            self.selected_tiles.clear()
+            if ctrl and not shift:
+              self.selected_tiles = self.glob.tilemap.select(self.pen_pos,
+                                                             self.layer)
+              self.glob.window.generate_mask()
 
-            elif ctrl and shift and self.entity_type == 'tiles':
-              px, py = self.pen_pos
-              curr_layer = self.layer
-              rect = self.glob.window.camera_rect
-              self.selected_tiles = self.glob.chunks.mask_select(px, py,
-                                                                 curr_layer,
-                                                                 rect)
+            elif ctrl and shift:
+              tile = self.glob.tilemap.get_tile(self.pen_pos, self.layer)
+              if tile:
+                self.selected_tiles.append(tile)
+                self.glob.window.generate_mask()
+
+
+            if self.tool == 'select':
+              px, py = pygame.mouse.get_pos()
+              self.last_pos = self.canvas_pos
+
             else:
               self.holding = True
-              self.selected_tiles.clear()
 
         elif event.button == 2:
           self.mouse_scroll = mx > self.glob.tbar_width
@@ -274,23 +274,21 @@ class Input:
         if event.button == 1:
 
           self.holding = False
-          self.last_pos = None
           self.prev_texture = None
-          self.glob.prev_chunk_states.append(self.glob.chunks.copy())
 
           if mx > self.glob.tbar_width and self.tool == 'select':
-            self.sel_rect.append(self.pen_pos)
+            self.selection = self.generate_rect(self.canvas_pos,
+                                                self.entity_type == 'tiles')
+            if self.selection.w * self.selection.h < RECT_THRESHOLD:
+              self.selection = None
+            else:
+              self.selected_tiles.clear()
+              self.selected_tiles = self.glob.tilemap.get_tiles(self.selection,
+                                                                self.layer,
+                                                                inclusive=False)
+              self.glob.window.generate_mask()
 
-            if not self.has_valid_sel_rect:
-              self.sel_rect = []
-            elif self.entity_type == 'tiles':
-              left, top, right, bot = *self.sel_rect[0], *self.sel_rect[1]
-              t_size = self.glob.chunks.TILE_SIZE
-              left = floor(left / t_size) * t_size
-              top = floor(top / t_size) * t_size
-              right = ceil(right / t_size) * t_size - 1
-              bot = ceil(bot / t_size) * t_size - 1
-              self.sel_rect = [(left, top), (right, bot)]
+          self.last_pos = None
 
         elif event.button == 2:
           self.mouse_scroll = False
