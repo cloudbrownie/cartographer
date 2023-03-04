@@ -3,45 +3,6 @@ import pygame
 from pygame.draw import *
 from pygame.transform import scale
 
-# generates a mask of a set of tiles and stores internally
-def generate_mask(tiles : list, t_size : float) -> None:
-  for i in range(len(tiles)):
-    tiles[i] = tiles[i][0] * t_size, tiles[i][1] * t_size
-
-  # find bounds
-  left = tiles[0][0]
-  top = tiles[0][1]
-  right = tiles[0][0]
-  bot = tiles[0][1]
-
-  for tile in tiles:
-    if tile[0] < left:
-      left = tile[0]
-    elif tile[0] > right:
-      right = tile[0]
-    elif tile[1] < top:
-      top = tile[1]
-    elif tile[1] > bot:
-      bot = tile[1]
-
-  w = right - left + t_size
-  h = bot - top + t_size
-
-  # make mask
-  mask_surf = pygame.Surface((w, h))
-  mask_surf.set_colorkey((0, 0, 0))
-  for tile_data in tiles:
-
-    x, y = tile_data
-    x -= left
-    y -= top
-    pygame.draw.rect(mask_surf, (255, 255, 255), (x, y, t_size, t_size))
-
-  mask = pygame.mask.from_surface(mask_surf)
-  washed_surf = mask.to_surface()
-  washed_surf.set_colorkey((0, 0, 0))
-
-  return washed_surf, left, top
 
 class Window:
   # init
@@ -85,19 +46,49 @@ class Window:
     self.tex_scroll_bound = 0
     self.TEX_SCROLL_TOL = 0.01
 
+    self.cached_selection_outline = None
+    self.cached_selection_pos = None
     self.hov_tex = None
     self.sel_tex = None
     self.curr_tex_data = None
 
     self.render_cache = {}
 
-    self.sel_mask = None
-    self.sel_mask_coords = 0, 0
-
     self.view_modes = ['all', 'focus', 'single']
     self.view_mode_i = 0
 
     self.show_grid = False
+
+  # generates a selection mask for outlining the selected tiles then caches it
+  def generate_mask(self) -> pygame.Surface:
+    tiles = self.glob.input.selected_tiles
+    tile_size = self.glob.TILE_SIZE
+    left = min(tiles, key=lambda x: x[0][0])[0][0]
+    top = min(tiles, key=lambda x: x[0][1])[0][1]
+    right = max(tiles, key=lambda x: x[0][0])[0][0]
+    bottom = max(tiles, key=lambda x: x[0][1])[0][1]
+
+    w = right - left
+    h = bottom - top
+
+    cached_surf = pygame.Surface((w + tile_size * 3, h + tile_size * 3))
+    cached_surf.set_colorkey((0, 0, 0))
+
+    for (x, y), asset_data in tiles:
+        surf = self.glob.sheets.get_asset(*asset_data).copy()
+        mask = pygame.mask.from_surface(surf)
+        offx, offy = self.glob.sheets.get_config_info(*asset_data)
+
+        mask_surf = mask.to_surface()
+        mask_surf.set_colorkey((0, 0, 0))
+
+        for bx, by in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+          cached_surf.blit(mask_surf, (x - left + tile_size + offx + bx,
+                                       y - top + tile_size + offy + by))
+
+    self.cached_selection_outline = cached_surf
+    self.cached_selection_pos = left - tile_size, top - tile_size
+
 
   # called each frame to render stuff to the window
   def render(self) -> None:
@@ -123,8 +114,8 @@ class Window:
     # show the grid
     if self.show_grid:
 
-      chunk_size = self.glob.chunk_size
-      tile_size = self.glob.tile_size
+      chunk_size = self.glob.CHUNK_SIZE
+      tile_size = self.glob.TILE_SIZE
       h_chunk_lines = self.camera_rect[2] // chunk_size
       v_chunk_lines = self.camera_rect[3] // chunk_size
       camera_x, camera_y = self.camera_rect[0:2]
@@ -172,40 +163,30 @@ class Window:
 
     # draw outline for selected tiles
     if self.glob.input.selected_tiles:
-      if not self.sel_mask:
-        # generate a mask for the selected tiles
-        surf, x, y = generate_mask(list(self.glob.input.selected_tiles), t_size)
-        self.sel_mask = surf
-        self.sel_mask_coords = x, y
 
-      # blit with offsets in 8 directions
-      for nx, ny in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1),
-                                                            (-1, 1), (-1, -1)]:
-        blit_x = self.sel_mask_coords[0] + nx * 3 - scroll[0]
-        blit_y = self.sel_mask_coords[1] + ny * 3 - scroll[1]
-        self.camera.blit(self.sel_mask, (blit_x, blit_y))
+      if not self.cached_selection_outline:
+        self.generate_mask()
 
-    elif not self.glob.input.selected_tiles and self.sel_mask:
-      self.sel_mask = None
+      x, y = self.cached_selection_pos
+      self.camera.blit(self.cached_selection_outline, (x - scroll[0],
+                                                       y - scroll[1]))
 
     # new rendering system
     layers = self.glob.tilemap.get_visible(self.camera_rect.topleft,
                                           self.camera_rect.size)
     for layer_data in layers:
-      for raw_tile in layer_data:
-        x, y = raw_tile[0]
+      for (x, y), asset_data in layer_data:
+        offx, offy = self.glob.sheets.get_config_info(*asset_data)
 
-        offsets = self.glob.sheets.get_config_info(*raw_tile[1])
-
-        x -= scroll[0] - offsets[0]
-        y -= scroll[1] - offsets[1]
-        self.camera.blit(self.glob.sheets.get_asset(*raw_tile[1]), (x, y))
+        x -= scroll[0] - offx
+        y -= scroll[1] - offy
+        self.camera.blit(self.glob.sheets.get_asset(*asset_data), (x, y))
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
       hover_surf = self.sel_tex.copy()
       hover_surf.set_alpha(120)
-      t_size = self.glob.chunks.TILE_SIZE
+      t_size = self.glob.TILE_SIZE
       row, col = self.curr_tex_data
       if self.glob.input.entity_type == 'tiles':
 
@@ -223,11 +204,18 @@ class Window:
         self.camera.blit(hover_surf, (bx, by))
 
     # draw the selection rect
-    if self.glob.input.sel_rect:
-      rect = list(self.glob.input.selection_rect)
-      rect[0] -= scroll[0]
-      rect[1] -= scroll[1]
-      pygame.draw.rect(self.camera, accent_c, rect, 3)
+    if self.glob.input.last_pos and self.glob.input.tool == 'select':
+      drawn_rect = self.glob.input.generate_rect(self.glob.input.canvas_pos,
+                                                  self.glob.input.entity_type
+                                                  == 'tiles')
+      drawn_rect.x -= scroll[0]
+      drawn_rect.y -= scroll[1]
+      pygame.draw.rect(self.camera, accent_c, drawn_rect, 3)
+    elif self.glob.input.selection:
+      drawn_rect = pygame.Rect(self.glob.input.selection)
+      drawn_rect.x -= scroll[0]
+      drawn_rect.y -= scroll[1]
+      pygame.draw.rect(self.camera, accent_c, drawn_rect, 3)
 
     self.window.blit(scale(self.camera, cam_size), (self.glob.tbar_width, 0))
 
