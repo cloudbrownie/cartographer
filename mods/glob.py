@@ -1,4 +1,3 @@
-from mods.chunks import Chunks
 from mods.sheets import Sheets
 from mods.window import Window
 from mods.input import Input
@@ -82,16 +81,21 @@ class Glob:
   # called each frame to update global stuff
   def update(self) -> None:
 
+    self.scroll_t[0] = round(self.scroll_t[0], 2)
+    self.scroll_t[1] = round(self.scroll_t[1], 2)
+
     # update the scroll value
     if self.scroll[0] != self.scroll_t[0]:
       d_scroll = (self.scroll_t[0] - self.scroll[0]) / 5 * self.clock.dt
       self.scroll[0] += d_scroll
+      self.scroll[0] = round(self.scroll[0], 2)
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[0] = self.scroll_t[0]
 
     if self.scroll[1] != self.scroll_t[1]:
       d_scroll = (self.scroll_t[1] - self.scroll[1]) / 5 * self.clock.dt
       self.scroll[1] += d_scroll
+      self.scroll[1] = round(self.scroll[1], 2)
       if abs(self.scroll[0] - self.scroll_t[1]) <= self.SCROLL_TOL:
         self.scroll[1] = self.scroll_t[1]
 
