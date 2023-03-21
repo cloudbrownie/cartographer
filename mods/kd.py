@@ -157,48 +157,27 @@ class KDTree:
     self._range(x.right, query, resize_rect(curr_rect, x.pos, 1, vert),
                 found, not vert)
 
-  # draws the tree to a given display
-  def draw(self, display: pygame.Surface, bounds: pygame.Rect, scroll: tuple,
-           nearest: tuple) -> None:
-    self._draw(self.root, self.root, True, display, bounds, scroll, nearest)
+  # returns the kdtree as a dictionary
+  def convert_to_dict(self) -> dict:
+    if not self.root:
+      return {}
 
-  # recursive helper method for the draw method
-  def _draw(self, x: _Node, parent: _Node, vert: bool, display: pygame.Surface,
-            rect: pygame.Rect, scroll: tuple, nearest: tuple) -> None:
+    kd_dict = {
+      'pos': self.root.pos,
+      'data': self.root.data,
+      'left': self._convert_to_dict(self.root.left),
+      'right': self._convert_to_dict(self.root.right)
+    }
+
+    return kd_dict
+
+  def _convert_to_dict(self, x: _Node) -> dict:
     if not x:
-      return
+      return None
 
-    px, py = x.pos
-    if vert:
-      self._draw_segment(display, x.pos, parent.pos, rect, vert, scroll)
-      # segements on both side of the vertical split
-      left_rect = pygame.Rect(rect.x, rect.y, px - rect.x, rect.h)
-      right_rect = pygame.Rect(px, rect.y, rect.right - px, rect.h)
-    else:
-      self._draw_segment(display, x.pos, parent.pos, rect, vert, scroll)
-      # segments on both side of the horizontal split
-      left_rect = pygame.Rect(rect.x, rect.y, rect.w, py - rect.top)
-      right_rect = pygame.Rect(rect.x, py, rect.w, rect.bottom - py)
-
-    self._draw(x.left, x, not vert, display, left_rect, scroll, nearest)
-    self._draw(x.right, x, not vert, display, right_rect, scroll, nearest)
-
-  # helper method for drawing line segments
-  def _draw_segment(self, display: pygame.Surface, pos: tuple,
-                    parent_pos: tuple, rect: pygame.Rect, vert:
-                    bool, scroll: tuple) -> None:
-    x, y = pos
-    if vert:
-      start = x - scroll[0], rect.top - scroll[1]
-      end = x - scroll[0], rect.bottom - scroll[1]
-      pygame.draw.line(display, (255, 150, 150), start, end)
-      pygame.draw.circle(display, (100, 100, 100),
-                         (x - scroll[0], parent_pos[1] - scroll[1]), 2)
-    else:
-      start = rect.left - scroll[0], y - scroll[1]
-      end = rect.right - scroll[0], y - scroll[1]
-      pygame.draw.line(display, (150, 150, 255), start, end)
-      pygame.draw.circle(display, (100, 100, 100),
-                         (parent_pos[0] - scroll[0], y - scroll[1]), 2)
-    pygame.draw.circle(display, (255, 255, 255),
-                       (x - scroll[0], y - scroll[1]), 3)
+    return {
+      'pos': x.pos,
+      'data': x.data,
+      'left': self._convert_to_dict(x.left),
+      'right': self._convert_to_dict(x.right)
+    }
