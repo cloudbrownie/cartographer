@@ -2,6 +2,8 @@ import math
 import time
 import pygame
 
+from mods.kd import KDTree
+
 neighbors = ((0, -1), (1, 0), (0, 1), (-1, 0))
 entity_id = 1
 
@@ -11,6 +13,7 @@ class TileMap:
     self.tiles = {}
     self.off_grid = {}
     self.layers = []
+    self.entities = {}
 
   # adds a tile to the tile map system (pos is assuemd to already be tiled)
   def add_tile(self, pos: tuple, _type: str, asset: tuple, layer: str,
@@ -64,36 +67,66 @@ class TileMap:
                      'asset':asset,
                      'raw':[pos, asset]}
 
-    if layer not in self.off_grid:
-      self.off_grid[layer] = []
-    self.off_grid[layer].append(off_grid_info)
-
+    # entities are just spatial hashed during map creation
     if _type == 'entities':
       unique_id = int(time.time() * 100 + entity_id * 10000)
-      self.off_grid[layer][-1]['id'] = unique_id
+      if layer not in self.entities:
+        self.entities[layer] = []
+      off_grid_info['id'] = unique_id
+      self.entities[layer].append(off_grid_info)
       entity_id += 1
+
+    else:
+      if layer not in self.off_grid:
+        self.off_grid[layer] = KDTree(90)
+      self.off_grid[layer].put(pos, off_grid_info)
 
     if layer not in self.layers:
       self.layers.append(layer)
       self.layers.sort()
 
-  def remove_off_grid(self, rect: pygame.Rect, layer: str) -> dict:
+  # removes an object from the off_grid dictionary
+  def remove_off_grid(self, rect: pygame.Rect, layer: str) -> list:
     if layer not in self.tiles:
       return
 
+    remove = []
+    for i, tile in sorted(enumerate(self.off_grid[layer]), reverse=True):
+      tile_rect = pygame.Rect(tile['raw'][0][0], tile['raw'][0][1],
+                              self.tile_size, self.tile_size)
+      if rect.colliderect(tile_rect):
+        remove.append(self.off_grid[layer][i])
+        self.off_grid[layer].pop(i)
+
+    return remove
 
   # returns all tiles visible within the given rect
   def get_visible(self, pos: tuple, size: int) -> list:
     layer_data = {l : [] for l in self.layers}
 
-    pos = (int(round(pos[0] / self.tile_size - 0.5, 0)),
+    # gather tiles
+    tiled_pos = (int(round(pos[0] / self.tile_size - 0.5, 0)),
           int(round(pos[1] / self.tile_size - 0.5, 0)))
     for x in range(math.ceil(size[0] / self.tile_size) + 1):
       for y in range(math.ceil(size[1] / self.tile_size) + 1):
-        tile_pos = x + pos[0], y + pos[1]
+        tile_pos = x + tiled_pos[0], y + tiled_pos[1]
         if tile_pos in self.tiles:
           for tile in self.tiles[tile_pos]:
             layer_data[tile].append(self.tiles[tile_pos][tile]['raw'])
+
+    query_rect = pygame.Rect(pos, size)
+
+    # gather decor
+    for layer in self.off_grid:
+      query = self.off_grid[layer].range(query_rect)
+      for decor in query:
+        layer_data[layer].append(decor['raw'])
+
+    # gather entities
+    for layer in self.entities:
+      for entity in self.entities[layer]:
+        if query_rect.collidepoint(entity['pos']):
+          layer_data[layer].append(entity['raw'])
 
     return [layer_data[l] for l in self.layers]
 
@@ -227,7 +260,7 @@ class TileMap:
 
     return tiles
 
-  # assumes tiles input is of tile raw data, converts raw data into tiled data
+  # assumes tiles input is of tile raw data, converts raw data into tiled pos
   def tilify(self, tiles: list) -> list:
     tiled = []
     for (x, y), _ in tiles:

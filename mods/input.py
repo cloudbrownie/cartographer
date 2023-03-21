@@ -1,4 +1,3 @@
-from ast import mod
 import pygame, sys
 
 from pygame.locals import *
@@ -57,6 +56,8 @@ class Input:
   @property
   def pen_pos(self) -> tuple[float, float]:
     x, y = self.canvas_pos
+    x = round(x, 1)
+    y = round(y, 1)
 
     if self.entity_type != 'tiles' or self.tool == 'select':
       return x, y
@@ -139,6 +140,10 @@ class Input:
             self.selected_tiles.clear()
           if self.selection:
             self.selection = None
+
+        elif event.key == K_q and ctrl:
+          pygame.quit()
+          sys.exit()
 
         elif event.key in self.arrow_bools.keys() and not ctrl and not shift:
           self.arrow_bools[event.key] = True
@@ -244,7 +249,8 @@ class Input:
             if ctrl and not shift:
               self.selected_tiles = self.glob.tilemap.select(self.pen_pos,
                                                              self.layer)
-              self.glob.window.generate_mask()
+              if self.selected_tiles:
+                self.glob.window.generate_mask()
 
             elif ctrl and shift:
               tile = self.glob.tilemap.get_tile(self.pen_pos, self.layer)
@@ -322,20 +328,16 @@ class Input:
           self.last_pos = px, py
           self.prev_texture = texture
 
-        '''
         elif self.entity_type == 'decor':
 
           sheet = self.glob.window.sel_sheet
           row, col = self.glob.window.curr_tex_data
-          surf = self.glob.sheets.sheets[sheet][row][col]
-          w, h = surf.get_size()
-          x = px - w / 2
-          y = py - h / 2
-
-          add_decor = self.glob.chunks.add_decor(x, y, _layer, sheet,
-            (row, col), (w, h))
+          asset_size = self.glob.sheets.get_asset(sheet, row, col).get_size()
+          loc = (self.pen_pos[0] - asset_size[0] / 2,
+                 self.pen_pos[1] - asset_size[1] / 2)
+          self.glob.tilemap.add_off_grid(loc, 'decor', (sheet, row, col),
+                                         self.layer)
           self.holding = False
-        '''
 
       elif self.tool == 'erase':
 

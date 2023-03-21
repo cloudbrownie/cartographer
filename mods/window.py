@@ -116,25 +116,25 @@ class Window:
 
       chunk_size = self.glob.CHUNK_SIZE
       tile_size = self.glob.TILE_SIZE
-      h_chunk_lines = self.camera_rect[2] // chunk_size
-      v_chunk_lines = self.camera_rect[3] // chunk_size
-      camera_x, camera_y = self.camera_rect[0:2]
+      h_chunk_lines = self.camera_rect.w // chunk_size
+      v_chunk_lines = self.camera_rect.h // chunk_size
+      camera_x, camera_y = self.camera_rect.topleft
 
       # tile grid
-      h_tile_lines = self.camera_rect[2] // tile_size
-      v_tile_lines = self.camera_rect[3] // tile_size
+      h_tile_lines = self.camera_rect.w // tile_size
+      v_tile_lines = self.camera_rect.h // tile_size
 
       x_start = camera_x // tile_size * tile_size
       for i in range(-1, h_tile_lines):
         start = x_start - scroll[0], camera_y - scroll[1]
-        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1]
+        end = x_start - scroll[0], camera_y + self.camera_rect.h - scroll[1]
         line(self.camera, muted_comp, start, end, max(int(zoom), 1))
         x_start += tile_size
 
       y_start = camera_y // tile_size * tile_size
       for i in range(-1, v_tile_lines + 1):
         start = camera_x - scroll[0], y_start - scroll[1]
-        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
+        end = camera_x + self.camera_rect.w - scroll[0], y_start - scroll[1]
         line(self.camera, muted_comp, start, end, max(int(zoom), 1))
         y_start += tile_size
 
@@ -142,24 +142,23 @@ class Window:
       x_start = camera_x // chunk_size * chunk_size
       for i in range(-1, h_chunk_lines):
         start = x_start - scroll[0], camera_y - scroll[1]
-        end = x_start - scroll[0], camera_y + self.camera_rect[3] - scroll[1]
+        end = x_start - scroll[0], camera_y + self.camera_rect.h - scroll[1]
         line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
         x_start += chunk_size
 
       y_start = camera_y // chunk_size * chunk_size
       for i in range(-1, v_chunk_lines + 1):
         start = camera_x - scroll[0], y_start - scroll[1]
-        end = camera_x + self.camera_rect[2] - scroll[0], y_start - scroll[1]
+        end = camera_x + self.camera_rect.w - scroll[0], y_start - scroll[1]
         line(self.camera, m_comp_c, start, end, max(int(zoom), 1))
         y_start += chunk_size
 
     # origin indicator
-    ind_len = max(int(20 * zoom / 2), 1)
-    ind_w = max(int(3 * zoom), 1)
-    line(self.camera, accent_c, (-ind_len - scroll[0], -scroll[1]), \
-      (ind_len - scroll[0], -scroll[1]), ind_w)
+    ind_len = 7
+    line(self.camera, accent_c, (-ind_len - scroll[0], - scroll[1]), \
+      (ind_len - scroll[0], -scroll[1]), 1)
     line(self.camera, accent_c, (-scroll[0], -ind_len - scroll[1]), \
-      (-scroll[0], ind_len - scroll[1]), ind_w)
+      (-scroll[0], ind_len - scroll[1]), 1)
 
     # draw outline for selected tiles
     if self.glob.input.selected_tiles:
@@ -171,16 +170,28 @@ class Window:
       self.camera.blit(self.cached_selection_outline, (x - scroll[0],
                                                        y - scroll[1]))
 
-    # new rendering system
+    # new rendering system for tiles
     layers = self.glob.tilemap.get_visible(self.camera_rect.topleft,
                                           self.camera_rect.size)
-    for layer_data in layers:
+    for i, layer_data in enumerate(layers):
+      if self.view_mode_i == 2 and i != self.glob.input._layer:
+       continue
+
+      layer_cache = {}
+
       for (x, y), asset_data in layer_data:
         offx, offy = self.glob.sheets.get_config_info(*asset_data)
 
         x -= scroll[0] - offx
         y -= scroll[1] - offy
-        self.camera.blit(self.glob.sheets.get_asset(*asset_data), (x, y))
+        asset_hash = hash(asset_data)
+        if asset_hash not in layer_cache:
+          asset = self.glob.sheets.get_asset(*asset_data).copy()
+          if self.view_mode_i == 1 and i != self.glob.input._layer:
+            asset.set_alpha(40)
+          layer_cache[asset_hash] = asset
+
+        self.camera.blit(layer_cache[asset_hash], (x, y))
 
     # draw tile highlight at current pen position
     if self.sel_tex and self.glob.input.tool == 'draw':
@@ -189,7 +200,6 @@ class Window:
       t_size = self.glob.TILE_SIZE
       row, col = self.curr_tex_data
       if self.glob.input.entity_type == 'tiles':
-
         tx = px * t_size - scroll[0]
         ty = py * t_size - scroll[1]
         offsets = self.glob.sheets.get_config_info(self.sel_sheet, row, col)
@@ -200,7 +210,6 @@ class Window:
         w, h = hover_surf.get_size()
         bx = px - w / 2 - scroll[0]
         by = py - h / 2 - scroll[1]
-
         self.camera.blit(hover_surf, (bx, by))
 
     # draw the selection rect
@@ -232,6 +241,7 @@ class Window:
     layer : {self.glob.input.layer}
     auto-tile : {'on' if self.glob.input.auto_tiling else 'off'}
     view mode : {self.view_modes[self.view_mode_i]}
+    scroll : {self.glob.scroll}
     '''
 
     info_loc = self.glob.tbar_width, 0
